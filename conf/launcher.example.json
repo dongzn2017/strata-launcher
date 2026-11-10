@@ -1,0 +1,46 @@
+{
+  "$schema": "./launcher.schema.json",
+  "version": 1,
+  "deployment": {
+    "controlDirectory": "C:/Strata/components/control/0.2.13",
+    "engineDirectory": "C:/Strata/components/engine/0.2.13-windows-x86_64-cuda-cuda13",
+    "engineVersion": "0.2.13"
+  },
+  "profiles": [
+    {
+      "id": "example-text",
+      "quant": "q4_k_xl",
+      "profile": "C:/Models/example/strata-text.json",
+      "minimumFreeGiB": 45,
+      "settings": {
+        "port": 8080
+      }
+    },
+    {
+      "id": "example-tuned-drafting",
+      "quant": "iq4_xs_v31",
+      "slug": "example-model",
+      "profile": "C:/Models/example/strata-vision.json",
+      "minimumFreeGiB": 40,
+      "settings": {
+        "port": 8081,
+        "drafting": "dflash2"
+      },
+      "draftOptions": {
+        "mode": "manual",
+        "pack": "tuned",
+        "window": 5,
+        "confidence": 0.8
+      },
+      "dflash2": {
+        "pack": "example-model-draft.q4_0-selq4.pack",
+        "model": "example-model-ud-iq4_xs-v31",
+        "quant": "iq4_xs_v31",
+        "engineVersions": ["0.2.13"]
+      },
+      "limits": {
+        "context": [32768, 262144]
+      }
+    }
+  ]
+}

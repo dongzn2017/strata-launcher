@@ -1,0 +1,26 @@
+{
+  "name": "strata-launcher",
+  "version": "0.1.0",
+  "description": "Start, check and stop a local Strata inference service from one JSON config - for people and for AI agents.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test launcher.test.mjs scripts/strata-panel",
+    "test:python": "python -B scripts/strata-panel/runner_test.py"
+  },
+  "keywords": [
+    "strata",
+    "llm",
+    "inference",
+    "gguf",
+    "windows",
+    "local-ai"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dongzn2017/strata-launcher.git"
+  }
+}

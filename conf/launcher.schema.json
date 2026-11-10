@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dongzn2017/strata-launcher/conf/launcher.schema.json",
+  "title": "Strata Launcher configuration",
+  "type": "object",
+  "required": ["version", "deployment", "profiles"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": 1},
+    "deployment": {
+      "type": "object",
+      "required": ["controlDirectory", "engineDirectory", "engineVersion"],
+      "additionalProperties": false,
+      "properties": {
+        "controlDirectory": {"type": "string", "minLength": 1, "description": "Strata Control directory, e.g. C:/Strata/components/control/0.2.13"},
+        "engineDirectory": {"type": "string", "minLength": 1, "description": "Engine directory holding strata.exe"},
+        "engineVersion": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"}
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "quant", "profile", "minimumFreeGiB"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+          "quant": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$", "description": "Free-form quant id used in the advertised model name"},
+          "slug": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,47}$", "description": "Overrides the model-name prefix; default comes from the model profile's model_name or file name"},
+          "profile": {"type": "string", "minLength": 1, "description": "Strata model profile JSON with an args array"},
+          "minimumFreeGiB": {"type": "number", "exclusiveMinimum": 0, "description": "Free system RAM required before the engine is admitted"},
+          "limits": {"$ref": "#/$defs/limits"},
+          "settings": {"$ref": "#/$defs/settings"},
+          "sampling": {"$ref": "#/$defs/sampling"},
+          "engineOptions": {"$ref": "#/$defs/engineOptions"},
+          "draftOptions": {"$ref": "#/$defs/draftOptions"},
+          "dflash2": {"$ref": "#/$defs/dflash2"},
+          "learning": {"$ref": "#/$defs/learning"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"type": "number"}
+    },
+    "limits": {
+      "type": "object",
+      "description": "Per-profile bounds replacing the defaults for settings validated before launch",
+      "additionalProperties": false,
+      "properties": {
+        "context": {"$ref": "#/$defs/range"}, "output": {"$ref": "#/$defs/range"},
+        "thinking": {"$ref": "#/$defs/range"}, "kvResident": {"$ref": "#/$defs/range"},
+        "expertGiB": {"$ref": "#/$defs/range"}, "headroomGiB": {"$ref": "#/$defs/range"},
+        "vramMiB": {"$ref": "#/$defs/range"}, "workers": {"$ref": "#/$defs/range"},
+        "spec": {"$ref": "#/$defs/range"}, "specMinP": {"$ref": "#/$defs/range"},
+        "port": {"$ref": "#/$defs/range"}, "visionThreads": {"$ref": "#/$defs/range"},
+        "imageTokens": {"$ref": "#/$defs/range"}
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "context": {"type": "integer"}, "output": {"type": "integer"}, "thinking": {"type": "integer"},
+        "effort": {"enum": ["off", "low", "medium", "high"]}, "kv": {"enum": ["int8", "k8v4"]},
+        "kvResident": {"type": "integer"}, "expertGiB": {"type": "number"}, "headroomGiB": {"type": "number"},
+        "vramMiB": {"type": "integer"}, "workers": {"type": "integer"}, "spec": {"type": "integer"},
+        "specMinP": {"type": "number"}, "drafting": {"enum": ["mtp", "dflash2"]},
+        "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "visionThreads": {"type": "integer"}, "imageTokens": {"type": "integer"}
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["model", "custom"]},
+        "seed": {"type": ["integer", "null"], "minimum": 1, "maximum": 2147483647},
+        "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+        "top_p": {"type": "number", "minimum": 0.01, "maximum": 1},
+        "top_k": {"type": "integer", "minimum": 1, "maximum": 64},
+        "min_p": {"type": "number", "minimum": 0, "maximum": 1},
+        "repetition_penalty": {"type": "number", "minimum": 0.1, "maximum": 2},
+        "presence_penalty": {"type": "number", "minimum": 0, "maximum": 2},
+        "frequency_penalty": {"type": "number", "minimum": 0, "maximum": 2},
+        "penalty_last_n": {"type": "integer", "minimum": 1, "maximum": 131072}
+      }
+    },
+    "engineOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "routePrior": {"enum": ["default", "off", "on"]},
+        "kva": {"enum": ["default", "off", "on"]},
+        "vramFree": {"enum": ["default", "device"]}
+      }
+    },
+    "draftOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["auto", "manual"]},
+        "pack": {"enum": ["stock", "tuned"]},
+        "window": {"type": "integer", "minimum": 2, "maximum": 6},
+        "confidence": {"type": "number", "minimum": 0.05, "maximum": 1}
+      }
+    },
+    "dflash2": {
+      "type": "object",
+      "description": "Which drafter file this model has, and what it was verified against. Required when draftOptions.pack is tuned.",
+      "additionalProperties": false,
+      "properties": {
+        "pack": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "quant": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$"},
+        "engineVersions": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"}}
+      }
+    },
+    "learning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "reuse": {"type": "boolean"},
+        "scope": {"enum": ["general", "video", "coding"]},
+        "saveEveryMinutes": {"type": "integer", "minimum": 1, "maximum": 60}
+      }
+    }
+  }
+}

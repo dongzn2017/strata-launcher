@@ -1,0 +1,13 @@
+/conf/launcher.json
+/runtime/
+/logs/
+/.venv/
+node_modules/
+__pycache__/
+*.log
+*.gguf
+*.safetensors
+*.bin
+*.pack
+.env
+.env.*
