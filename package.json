@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test launcher.test.mjs scripts/strata-panel",
+    "test": "node --test launcher.test.mjs scripts/strata-panel/draft-options.test.mjs scripts/strata-panel/engine-options.test.mjs scripts/strata-panel/inspect.test.mjs scripts/strata-panel/learning.test.mjs scripts/strata-panel/sampling.test.mjs",
     "test:python": "python -B scripts/strata-panel/runner_test.py"
   },
   "keywords": [
