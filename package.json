@@ -1,6 +1,6 @@
 {
   "name": "strata-launcher",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Start, check and stop a local Strata inference service from one JSON config - for people and for AI agents.",
   "license": "MIT",
   "type": "module",
