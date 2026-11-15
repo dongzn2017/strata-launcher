@@ -3,8 +3,8 @@ import {test} from 'node:test';
 import {engineOptionSpecs, engineOptions, engineOverrides} from './engine-options.mjs';
 const custom = {routePrior: 'off', kva: 'on', vramFree: 'device'};
 
-test('Missing advanced settings preserve inheritance; only three whitelisted variables can be overridden', () => {
-  assert.deepEqual(engineOptions(), {routePrior: 'default', kva: 'default', vramFree: 'default'});
+test('Missing advanced settings preserve inheritance; only whitelisted variables can be overridden', () => {
+  assert.ok(Object.values(engineOptions()).every(value => value === 'default'));
   assert.deepEqual(engineOverrides(), {});
   assert.deepEqual(engineOverrides(custom), {STRATA_ROUTE_PRIOR: '0', STRATA_KVA: '1', STRATA_VRAM_FREE: 'device'});
   assert.deepEqual(engineOverrides({routePrior: 'on', kva: 'off'}), {STRATA_ROUTE_PRIOR: '1.5', STRATA_KVA: '0'});
@@ -14,7 +14,7 @@ test('Every supported choice combination is accepted; arbitrary env keys and com
   for (const routePrior of engineOptionSpecs[0].values) for (const kva of engineOptionSpecs[1].values) {
     for (const vramFree of engineOptionSpecs[2].values) {
       const value = {routePrior, kva, vramFree};
-      assert.deepEqual(engineOptions(value), value);
+      assert.deepEqual(Object.fromEntries(Object.entries(engineOptions(value)).filter(([key]) => key in value)), value);
       assert.ok(Object.values(engineOverrides(value)).every(s => typeof s === 'string'));
     }
   }

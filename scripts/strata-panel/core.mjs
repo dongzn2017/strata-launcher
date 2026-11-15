@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import {createHash, randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {learningOptions, modelIdentity, planLearning} from './learning.mjs';
 import {samplingDefaults, samplingOptions, samplingFields} from './sampling.mjs';
-import {engineOptions, engineOverrides} from './engine-options.mjs';
+import {engineOptions, engineOverrides, engineOptionIdentity, applyEngineOptions} from './engine-options.mjs';
+import {extraEngineOptionSpecs} from './engine-extra-options.mjs';
 import {draftOptions, configureDraft, draftGates} from './draft-options.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -96,7 +98,14 @@ export function check(request, deployment) {
   const learning = learningOptions(request.learning);
   const advanced = engineOptions(request.engineOptions);
   const envOverrides = engineOverrides(advanced);
-  const engineIdentity = Object.keys(envOverrides).length ? {engineOptions: advanced} : {};
+  const engineIdentity = engineOptionIdentity(advanced);
+  if (extraEngineOptionSpecs.some(spec => advanced[spec.key] !== 'default') && deployment.engineVersion !== '0.1.59') {
+    throw new Error('Extended engine options are curated for engine 0.1.59; leave them at default on other versions');
+  }
+  if (advanced.pleIo === 'ram' && settings.expertGiB + settings.headroomGiB + 29 > os.totalmem()/2**30) {
+    throw new Error('PLE RAM mode plus expert budget and headroom exceeds physical RAM');
+  }
+  applyEngineOptions(profile, advanced, learning.enabled);
   const source = deployment.controlDirectory;
   const python = path.join(source, 'python/python.exe');
   const engine = path.join(deployment.engineDirectory, 'strata.exe');
@@ -119,7 +128,11 @@ export function check(request, deployment) {
   const routing = planLearning({baseFile: assets['--expert-profile'],
     identity: {...modelIdentity(profile, deployment.engineVersion), ...engineIdentity}, options: learning,
     storeRoot: path.join(stateRoot, 'learning')});
-  if (learning.enabled && ['--adapt-every', '--adapt-swaps'].some(key => arg(profile, key) !== undefined && +arg(profile, key) <= 0)) {
+  const effectiveArgs = [...profile.args, ...(profile.user_args || [])];
+  if (learning.enabled && ['--adapt-every', '--adapt-swaps'].some(key => {
+    const index = effectiveArgs.lastIndexOf(key);
+    return index >= 0 && +effectiveArgs[index + 1] <= 0;
+  })) {
     throw new Error('Routing learning requires adaptive expert caching; adaptation is disabled in this preset');
   }
   const quant = request.quant;

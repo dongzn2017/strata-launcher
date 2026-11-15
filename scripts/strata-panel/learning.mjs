@@ -6,6 +6,10 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 export const learningScopes = ['general', 'video', 'coding'];
 
 export function learningOptions(value = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      Object.keys(value).some(key => !['enabled', 'reuse', 'scope', 'saveEveryMinutes'].includes(key))) {
+    throw new Error('Unknown or invalid routing learning option');
+  }
   const options = {enabled: false, reuse: true, scope: 'general', saveEveryMinutes: 5, ...value};
   if (typeof options.enabled !== 'boolean' || typeof options.reuse !== 'boolean' ||
       !learningScopes.includes(options.scope) || !Number.isInteger(options.saveEveryMinutes) ||

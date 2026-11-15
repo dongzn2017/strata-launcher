@@ -1,46 +1,65 @@
-# Runbook for AI agents
+# Agent Runbook: Strata Launcher 1.1.0
 
-Every command prints one JSON object on stdout. Machine-readable contract; nothing else on stdout.
+This repository is a portable CLI, not the developer's machine-specific GUI. Read both the model-host boundaries and the command contract before acting. Never copy local credentials, real LAN addresses, runtime state, weights or Pi watchdog budgets into this repository.
 
+## Command Contract
+
+Normal commands emit one JSON value on stdout; errors use stderr and exit 2. `--help` is text. Interactive `monitor` is a TTY screen, not JSON. `start` and `lan` print an initial JSON result and then remain in the foreground; their later failures may produce a nonzero exit.
+
+```text
+node launcher.mjs --version
+node launcher.mjs doctor [PROFILE]         exit 0 ready / 3 blocked / 2 broken config
+node launcher.mjs detect PATH...          candidate config; no save/start
+node launcher.mjs list
+node launcher.mjs check PROFILE           read-only offline validation
+node launcher.mjs prepare PROFILE         isolated run manifest, no engine
+node launcher.mjs start PROFILE           foreground, returns RUN_ID
+node launcher.mjs status RUN_ID
+node launcher.mjs stop RUN_ID             ownership-token stop request
+node launcher.mjs options [PROFILE]       catalogue; optional effective values
+node launcher.mjs set PROFILE FIELD VALUE validated section.field config edit
+node launcher.mjs monitor PROFILE [--once]
+node launcher.mjs monitor --url URL [--once]
+node launcher.mjs lan-plan PROFILE        no listener or run writes
+node launcher.mjs lan PROFILE             foreground bridge, returns separate LAN_ID
+node launcher.mjs lan-status LAN_ID
+node launcher.mjs lan-stop LAN_ID
 ```
-node launcher.mjs doctor [PROFILE]     environment + config + asset report   exit 0 ready / 3 blocked / 2 broken config
-node launcher.mjs detect PATH...       candidate config from a found install exit 0 / 2 nothing to search
-node launcher.mjs list                 [{id, quant, profile}]
-node launcher.mjs check PROFILE        offline validation of one profile     exit 0 / 2 first error on stderr
-node launcher.mjs prepare PROFILE      run dir written, nothing started
-node launcher.mjs start PROFILE        foreground; blocks until the engine exits
-node launcher.mjs status RUN_ID        snapshot of runtime/strata-launcher/runs/RUN_ID/status.json
-node launcher.mjs stop RUN_ID          ownership-token stop request
-```
 
-`Strata-Launcher.cmd <same args>` is the same thing on Windows. Exit codes: `0` ok, `2` bad usage or config (message on stderr, no JSON), `3` doctor says not ready (JSON on stdout anyway).
+`Strata-Launcher.cmd` forwards the same arguments on Windows. Monitor `--once` emits metrics JSON through the launcher. The standalone downloadable monitor's `--once` is a text snapshot.
 
-## Deploy procedure
+## Deployment
 
-1. `node launcher.mjs doctor` — expected to fail with `config.exists: false`.
-2. `node launcher.mjs detect <install-drive-or-folders>` — ask the human which folders hold the Strata install and the models if it is not obvious from the machine. `found` reports control/engine/model counts; `unreadable` lists folders that could not be read; `models_detail` lists every candidate model profile with its weights, context, modality and guessed quant.
-3. Write `config` from that output to `conf/launcher.json`. Replace every `null`: `minimumFreeGiB` needs the human's number (free RAM to demand before admitting the engine), a missing `quant` needs the human's label. Keep the guessed `deployment` only if `candidateInstalls` is 1; if it is 0 the versions do not pair and you must ask the human for the Control and engine directories.
-4. `node launcher.mjs doctor` again. For every entry in `report.problems[]`, act on its `error`:
-   - `Missing runtime file: …python.exe` → the Control directory is wrong.
-   - `cannot import psutil` → that Control install is incomplete; report it, do not pip-install into someone else's runtime.
-   - `A Strata engine is already running` → ask the human; do not kill another process.
-   - `Launcher-owned runs are still active` → `stop` them with their RUN_ID first.
-   - `port … is busy` → change that profile's `settings.port`.
-   - `Missing … .gguf` / model profile errors → the model JSON or the weights are wrong; report the exact missing path.
-5. `node launcher.mjs check PROFILE` until exit 0.
-6. `node launcher.mjs start PROFILE` as a long-lived job. It prints the run JSON: `id`, `directory`, `model`, `api`, `log`.
-7. Poll `status <RUN_ID>` (never the log for state). `state` goes `loading` → `ready` when the engine reports loaded; `stopped`, `exited` or `error` are terminal. Ready means `http://127.0.0.1:<port>/v1` answers.
-8. `stop <RUN_ID>` to shut down; the runner saves learned routing on the way out when learning is on.
+1. Run `doctor`; missing private config is expected initially. Ask which folders contain the existing Strata install/models if unknown; do not scan entire unrelated disks.
+2. Run bounded `detect PATH...`, inspect `candidateInstalls`, `unreadable`, `models_detail` and candidate `config`. Do not treat ambiguous pairing as established. Review paths and fill all nulls before writing `conf/launcher.json`.
+3. `deployment.engineVersion` is the **component** version, not the Terminal release. New advanced overrides target 0.1.59; they are not automatically valid on later/earlier engines.
+4. Run `doctor PROFILE` and `check PROFILE`. Report exact blockers. Missing psutil/assets means an incomplete or wrong installation: do not install into a vendor runtime or fetch models without authorization. Busy ports, another engine or active run are not permission to stop anything.
+5. Inspect `options PROFILE` and `prepare PROFILE`. Only run `start` when authorized. Record absolute run/log paths and the returned UUID.
+6. `status` is a saved snapshot. Confirm live health/model before claiming readiness; a loaded model is not proof of successful generation or tool calling. Leave real inference testing to a separately authorized bounded workload.
+7. `stop RUN_ID` is an explicit operation, not an automatic remediation step. It targets only the launcher-owned run. Do not clear unknown locks, adopt a PID or kill an unrelated engine.
 
-## Rules
+## Parameters and Storage
 
-- One engine at a time on a machine; `doctor` refuses to claim readiness otherwise.
-- Never edit a model profile JSON, never move weights, never write into the Strata install. The launcher reads those; all its writes go to `runtime/` and `logs/`.
-- Never start a run outside this launcher: `stop` only accepts a run whose ownership record it wrote.
-- `limits` is the only way to widen a numeric bound. Write the narrowest range that fits the model; a range the launcher does not recognise is rejected instead of ignored.
-- A tuned drafter needs a `dflash2` block naming the pack, the model, the quant and the verified engine versions. If you do not know them, leave the block out and ship the stock drafter. Do not invent them from a model name.
-- Report absolute paths and the RUN_ID to the human; `doctor` and `check` already give them.
+- Original model profiles, model assets and installed Strata files are read-only. Generated manifests/state/logs go under `runtime/` and `logs/`.
+- Explicit `set` is the exception: it edits private `conf/launcher.json`, after validation, with an original-config backup and an exclusive edit lock. No live model mutation or automatic restart follows. Never automatically clear an existing config lock.
+- Supported mutable sections: `settings`, `sampling`, `engineOptions`, `draftOptions`, `learning`, `limits`. No arbitrary environment/command pass-through. Reference-only entries are not editable controls.
+- `default` inherits model/process/engine behavior; it does not mean off. Preserve defaults unless the user asks for tuning. Risky route/approximation options may alter results, not just throughput.
+- `limits` changes recognized validation ranges, not physical resource guarantees. Do not lower admission/headroom just to force an unsafe start. Explicit PLE RAM mode is guarded against an obviously excessive total budget, not proven safe for every workload.
+- Routing learning is opt-in; reuse is bound to model assets, modality, engine, base routing, workload and explicit advanced overrides. Disabled adaptive caching conflicts with learning. Do not claim learning is model-weight training.
+- Tuned DFlash2 needs explicit actual pack/model/quant/verified-engine metadata. Do not invent compatibility from a filename. See docs/PARAMETERS.md and the schema.
 
-## Tests
+## LAN and Monitoring
 
-`npm test` and `npm run test:python` pass with no GPU, no model and no network. Run them before publishing any change here.
+- Keep the engine loopback-only. LAN is separately opt-in, explicitly bound to an owned private IPv4 and exact private/loopback client IPs. No wildcard/public binding.
+- `lan-plan` is safe to inspect offline. `lan` starts only the bridge, not the model. A stopped monitor/bridge must not stop the engine.
+- No automatic firewall rules, Windows tasks/services, TLS or API authentication are installed. Plain HTTP is trusted-private-LAN only. Do not widen network exposure to cure a timeout.
+- Client discovery uses live `/capabilities`, cross-checked health/props/models and matching hash-bound local settings. Preserve unknown reasoning values as null; use returned model ID/context and fingerprint instead of stale hard-coded values. Check again on reconnect or model change.
+- Capability advertisements are not generation/tool-call acceptance evidence. Do not start a Pi, reset watchdog state or migrate private sessions as a side effect.
+- Management endpoints are denied. Logs contain access metadata, not request bodies. Avoid adding prompt/answer logging. Terminal monitor reads only metrics, rejects stale data and exits on q/Ctrl+C without controlling the model.
+- Verify a downloaded monitor against a trusted server-side hash before execution; untrusted HTTP does not authenticate its own checksum.
+
+## Tests and Packaging
+
+Run `npm run schema:check`, `npm test`, and `npm run test:python`. Python tests require an existing test interpreter with psutil. Tests use temporary fixtures and bounded loopback mock HTTP; no GPU, real models, external APIs, downloads, GUI launches or remote tasks are needed.
+
+Use the explicit package allowlist; inspect `npm pack --dry-run --json` before building. Exclude private `conf/launcher.json`, runtime, logs, credentials and weights. Do not commit, push, tag or publish a release automatically.

@@ -1,6 +1,8 @@
 /conf/launcher.json
 /runtime/
 /logs/
+/dist/
+/conf/launcher.json.lock
 /.venv/
 node_modules/
 __pycache__/

@@ -21,7 +21,7 @@ const plan = options => planLearning({baseFile, storeRoot, identity, options});
 test('Learning options whitelist booleans, scopes and bounded integer intervals', () => {
   assert.equal(learningOptions().enabled, false); // Legacy callers remain opt-in.
   for (const options of [{enabled: 'true'}, {reuse: 1}, {scope: '../other'}, {scope: '$(bad)'},
-    {saveEveryMinutes: 0}, {saveEveryMinutes: 61}, {saveEveryMinutes: 1.5}]) assert.throws(() => learningOptions(options));
+    {saveEveryMinutes: 0}, {saveEveryMinutes: 61}, {saveEveryMinutes: 1.5}, {unknown: 1}, null, []]) assert.throws(() => learningOptions(options));
 });
 test('Learning begins from a validated base without modifying it; next run uses saved bytes', () => {
   const first = plan({enabled: true});

@@ -4,6 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {check, prepare, read, root, stateRoot, write} from './scripts/strata-panel/core.mjs';
 import {configSkeleton, detectInstalls, environment, probePort, probePython, runningEngines} from './scripts/strata-panel/inspect.mjs';
+import {parameterCatalogue,updateProfile} from './scripts/parameters.mjs';
+import {inheritedEngineOptions} from './scripts/strata-panel/engine-options.mjs';
+import {lanOptions,clientInfo} from './scripts/strata-lan/bridge.mjs';
+import {serveBridge,bridgeCommand} from './scripts/strata-lan/lifecycle.mjs';
+import {main as monitor,snapshot,endpoint} from './scripts/strata-lan/monitor-client.mjs';
 
 const configFile = path.join(root, 'conf/launcher.json');
 const usage = 'Usage:\n' +
@@ -13,7 +18,13 @@ const usage = 'Usage:\n' +
   '  node launcher.mjs check PROFILE           offline check of one profile\n' +
   '  node launcher.mjs prepare PROFILE         write a run directory without starting anything\n' +
   '  node launcher.mjs start PROFILE           start in the foreground and print the RUN_ID\n' +
-  '  node launcher.mjs status RUN_ID | stop RUN_ID';
+  '  node launcher.mjs status RUN_ID | stop RUN_ID\n' +
+  '  node launcher.mjs options [PROFILE]       parameter catalogue and inherited values\n' +
+  '  node launcher.mjs set PROFILE FIELD VALUE validate and save one section.field\n' +
+  '  node launcher.mjs monitor PROFILE [--once]\n' +
+  '  node launcher.mjs monitor --url URL [--once]\n' +
+  '  node launcher.mjs lan-plan PROFILE | lan PROFILE\n' +
+  '  node launcher.mjs lan-status LAN_ID | lan-stop LAN_ID';
 const runId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const terminalStates = ['stopped', 'exited', 'error'];
 
@@ -26,10 +37,10 @@ function configPath(value, key) {
   return path.resolve(path.dirname(configFile), value);
 }
 
-function loadConfig() {
+function loadConfig(provided) {
   let config;
   try {
-    config = read(configFile);
+    config = provided === undefined ? read(configFile) : provided;
   } catch (error) {
     if (error.code === 'ENOENT') throw new Error('Copy conf/launcher.example.json to conf/launcher.json and configure your installation.');
     throw error;
@@ -37,6 +48,8 @@ function loadConfig() {
   if (config?.version !== 1 || !object(config.deployment) || !Array.isArray(config.profiles) || !config.profiles.length) {
     throw new Error('Expected version 1, deployment and at least one profile in conf/launcher.json');
   }
+  if(Object.keys(config).some(key=>!['$schema','version','deployment','profiles','lan'].includes(key))) throw new Error('Unknown top-level configuration field');
+  if(Object.keys(config.deployment).some(key=>!['controlDirectory','engineDirectory','engineVersion'].includes(key))) throw new Error('Unknown deployment field');
   const {controlDirectory, engineDirectory, engineVersion} = config.deployment;
   if (typeof engineVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(engineVersion)) {
     throw new Error('deployment.engineVersion: expected the installed engine version, for example 0.1.59');
@@ -49,6 +62,7 @@ function loadConfig() {
       throw new Error('Each profile needs a lowercase id of up to 64 letters, digits, hyphens or underscores');
     }
     if (ids.has(profile.id)) throw new Error(`Duplicate profile id: ${profile.id}`);
+    if(Object.keys(profile).some(key=>!['id','quant','slug','profile','minimumFreeGiB','settings','sampling','engineOptions','draftOptions','learning','dflash2','limits'].includes(key))) throw new Error(`${profile.id}: unknown profile field`);
     ids.add(profile.id);
     if (!/^[a-z0-9][a-z0-9._-]{0,31}$/.test(profile.quant ?? '')) {
       throw new Error(`${profile.id}: quant: expected a lowercase id such as q4_k_xl or iq4_xs_v31`);
@@ -64,7 +78,7 @@ function loadConfig() {
     }
     return {...profile, profile: configPath(profile.profile, `${profile.id}.profile`)};
   });
-  return {deployment, profiles};
+  return {deployment, profiles, lan:lanOptions(config.lan)};
 }
 
 function runCommand(command, id) {
@@ -153,6 +167,10 @@ function detect(paths) {
 }
 
 async function main([command, id, ...extra]) {
+  if(command==='--version') {
+    if(id !== undefined || extra.length) throw new Error(usage);
+    return {version:read(path.join(root,'package.json')).version};
+  }
   if (command === undefined || command === '--help') {
     console.log(usage);
     return;
@@ -160,6 +178,49 @@ async function main([command, id, ...extra]) {
   if (command === 'detect') {
     if (!id) throw new Error('detect needs at least one folder to search');
     return detect([id, ...extra]);
+  }
+  if(command==='options') {
+    if(extra.length) throw new Error(usage);
+    const catalogue=parameterCatalogue();
+    if(!id) return catalogue;
+    const {deployment,profiles}=loadConfig(),request=profiles.find(p=>p.id===id);
+    if(!request) throw new Error(`Unknown profile: ${id}`);
+    const value=check(request,deployment);
+    return {...catalogue,profile:id,effective:{settings:value.settings,sampling:value.sampling,draftOptions:value.drafting,learning:value.routing.metadata,
+      engineOptions:value.advanced,inherited:inheritedEngineOptions(value.profile)}};
+  }
+  if(command==='set') {
+    if(!id || extra.length!==2) throw new Error(usage);
+    return updateProfile(configFile,id,extra[0],extra[1],(candidate,selected)=>{
+      const {profiles,deployment}=loadConfig(candidate);check(profiles.find(p=>p.id===selected),deployment);
+    });
+  }
+  if(command==='monitor') {
+    let url,once=false;
+    if(id==='--url') {
+      if(!extra[0] || extra.length>2 || extra[1]!==undefined && extra[1]!=='--once') throw new Error(usage);
+      url=endpoint(extra[0]);once=extra[1]==='--once';
+    } else {
+      if(!id || extra.length>1 || extra[0]!==undefined && extra[0]!=='--once') throw new Error(usage);
+      const {deployment,profiles}=loadConfig(),request=profiles.find(p=>p.id===id);
+      if(!request) throw new Error(`Unknown profile: ${id}`);
+      url=`http://127.0.0.1:${check(request,deployment).settings.port}`;once=extra[0]==='--once';
+    }
+    if(once) return snapshot(url);
+    await monitor(['--url',url]);return;
+  }
+  if(command==='lan-status' || command==='lan-stop') {
+    if(!id || extra.length) throw new Error(usage);return bridgeCommand(command,id);
+  }
+  if(command==='lan' || command==='lan-plan') {
+    if(!id || extra.length) throw new Error(usage);
+    const {deployment,profiles,lan}=loadConfig(),request=profiles.find(p=>p.id===id);
+    if(!request) throw new Error(`Unknown profile: ${id}`);
+    if(!lan) throw new Error('LAN is disabled: configure the optional lan block before starting a bridge');
+    const checked=check(request,deployment);
+    if(lan.port===checked.settings.port) throw new Error('LAN and model ports must differ');
+    if(command==='lan-plan') return {...lan,upstream:`http://127.0.0.1:${checked.settings.port}`,model:checked.model,terminal:clientInfo(`http://${lan.host}:${lan.port}`),started:false};
+    await serveBridge(lan,checked.settings.port,checked.model);return;
   }
   if (command === 'doctor') {
     if (extra.length) throw new Error(usage);

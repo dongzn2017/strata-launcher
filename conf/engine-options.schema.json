@@ -1,0 +1,554 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Curated Strata 0.1.59 engine options",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "routePrior": {
+      "type": "string",
+      "enum": [
+        "default",
+        "off",
+        "on"
+      ],
+      "default": "default",
+      "description": "STRATA_ROUTE_PRIOR: 偏向显存中已有专家. off 写入 0；on 写入 1.5，偏向 GPU 已缓存专家以提速，长 Agent 会话可能重复和能力下降。继承不等于关闭；它和 tail skip 完全独立。 Risk: 改变路由/质量"
+    },
+    "kva": {
+      "type": "string",
+      "enum": [
+        "default",
+        "off",
+        "on"
+      ],
+      "default": "default",
+      "description": "STRATA_KVA: KVA 长上下文近似加速. on 写入 1；off 写入 0。通过近似部分注意力工作加快长提示，可能漏掉或混淆长文细节。不是 KV 精度 k8v4。 Risk: 近似计算"
+    },
+    "vramFree": {
+      "type": "string",
+      "enum": [
+        "default",
+        "device"
+      ],
+      "default": "default",
+      "description": "STRATA_VRAM_FREE: 显存空闲量探测来源. device 尝试按设备/NVML 空闲量进行预算；具体回退和最终可分配量以启动日志为准。不会绕过 WDDM，也不保证所有空闲显存都能分配。 Risk: 资源/性能"
+    },
+    "tailSkip": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "default": "default",
+      "description": "STRATA_ROUTE_TAIL_SKIP: 尾部专家跳过. 0 关闭；1..9 是从零编号的排名门槛，数值越小越激进。仅跳过整个验证窗口都排在门槛之后且未命中 GPU 缓存的专家。7 对应第 8~10 位候选；不是每步固定少算 3 个专家。贡献置零，会改变答案。 Risk: 改变模型计算"
+    },
+    "tailSkipMaxCached": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "50",
+        "60",
+        "70",
+        "80",
+        "90",
+        "95",
+        "100",
+        "101"
+      ],
+      "default": "default",
+      "description": "STRATA_TAIL_SKIP_MAX_CACHED: 尾部跳过的缓存占比上限 (%). 控制默认 tail skip 的 GPU 专家缓存占比门槛，不是缓存命中率。达到门槛时默认跳过关闭；101 表示不会因占比而关闭。显式 tailSkip 值可覆盖默认判定。 Risk: 改变模型计算"
+    },
+    "prefillCpuShare": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "auto",
+        "1"
+      ],
+      "default": "default",
+      "description": "STRATA_PREFILL_CPU_SHARE: 短提示 CPU 专家分担. 0 禁用；auto 测量 CPU/GPU 成本后决定；1 显式启用。用于短提示的专家分担，不能保证更快；改变浮点计算路径，近似平局时答案可能变化。 Risk: 计算路径变化"
+    },
+    "pcieFrac": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "0.1",
+        "0.2",
+        "0.3",
+        "0.4",
+        "0.5",
+        "0.6",
+        "0.7",
+        "0.8",
+        "0.9",
+        "1"
+      ],
+      "default": "default",
+      "description": "--pcie-frac: 未命中专家的 PCIe 份额. 未命中 GPU 缓存的专家中，多少比例复制到 GPU 计算，其余由 CPU 原地计算。不是 GPU 利用率。增大可能减少 CPU 压力，也可能堵塞 PCIe。显式数值覆盖自动分配。 Risk: 计算路径变化"
+    },
+    "pcieDefault": {
+      "type": "string",
+      "enum": [
+        "default",
+        "old",
+        "auto"
+      ],
+      "default": "default",
+      "description": "STRATA_PCIE_FRAC_DEFAULT: PCIe 默认分配规则. old 使用旧探测规则，auto 允许运行时按 CPU 成本调整。显式 --pcie-frac 优先。 Risk: 资源/性能"
+    },
+    "pcieKRule": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1"
+      ],
+      "default": "default",
+      "description": "STRATA_PCIE_K_RULE: PCIe 自适应 K 规则. 0 回到旧 K 规则；1 允许按 CPU 吞吐调整 K。仅自动 PCIe 分配路径使用。 Risk: 资源/性能"
+    },
+    "pcieShareMax": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0.2",
+        "0.4",
+        "0.6",
+        "0.8",
+        "0.95"
+      ],
+      "default": "default",
+      "description": "STRATA_PCIE_SHARE_MAX: 自动 PCIe 份额上限. 限制自动规则的最大复制份额；不能替代总线带宽。显式 --pcie-frac 时不生效。 Risk: 资源/性能"
+    },
+    "hostCore": {
+      "type": "string",
+      "enum": [
+        "default",
+        "first",
+        "last",
+        "sibling"
+      ],
+      "default": "default",
+      "description": "--host-core: 主线程核心位置. first 第一物理核心；last 最后一物理核心；sibling 第一核心的 SMT 兄弟线程。用于避让驱动中断，不增加核心数。last 不适用于混合 P/E 核 CPU。 Risk: 资源/性能"
+    },
+    "poolAffinity": {
+      "type": "string",
+      "enum": [
+        "default",
+        "all",
+        "auto",
+        "p-cores",
+        "measure"
+      ],
+      "default": "default",
+      "description": "--pool-affinity: CPU 专家线程亲和性. all 每物理核心一个 worker；auto 优先 P 核；p-cores 仅 P 核及其 SMT；measure 在启动时做短测再选。请按实际 CPU 的 P/E 核和 SMT 结构选择。 Risk: 资源/性能"
+    },
+    "poolTasks": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "3",
+        "6",
+        "12",
+        "24",
+        "48",
+        "96",
+        "256",
+        "1024",
+        "4096"
+      ],
+      "default": "default",
+      "description": "--pool-tasks: CPU 专家任务批数. 0 为每参与线程约 3 个任务；正值限制每阶段任务数，仍按实际行数截断。太多会增加调度开销。 Risk: 资源/性能"
+    },
+    "auxCpus": {
+      "type": "string",
+      "enum": [
+        "default",
+        "off",
+        "auto"
+      ],
+      "default": "default",
+      "description": "--aux-cpus: 辅助线程 CPU 分配. off 保持创建时分配；auto 尝试放到主线程 SMT 兄弟及没有 worker 的核心。没有空闲核心时不会强行挪动。 Risk: 资源/性能"
+    },
+    "noHostWorker": {
+      "type": "string",
+      "enum": [
+        "default",
+        "off",
+        "on"
+      ],
+      "default": "default",
+      "description": "--no-host-worker: 禁止主线程加入专家计算. on 加入 --no-host-worker，主线程不再参与 CPU 专家任务；off 移除该开关。可能降低 CPU 吞吐。 Risk: 资源/性能"
+    },
+    "adaptEvery": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1",
+        "2",
+        "4",
+        "8",
+        "16",
+        "32",
+        "64"
+      ],
+      "default": "default",
+      "description": "--adapt-every: 专家缓存适应间隔. 每多少次验证窗口更新专家缓存；0 关闭自适应，与路由学习不兼容。不是保存学习表的分钟数。 Risk: 缓存位置变化"
+    },
+    "adaptSwaps": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "8",
+        "16",
+        "32",
+        "48",
+        "64",
+        "80",
+        "128",
+        "256"
+      ],
+      "default": "default",
+      "description": "--adapt-swaps: 每轮专家交换数. 越多越快追随新话题，也增加复制和适应成本；0 不交换，与路由学习不兼容。 Risk: 缓存位置变化"
+    },
+    "adaptDecay": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0.8",
+        "0.9",
+        "0.95",
+        "0.97",
+        "0.99",
+        "0.995",
+        "1"
+      ],
+      "default": "default",
+      "description": "--adapt-decay: 专家热度衰减. 越小越快忘记旧话题；1 不衰减。不是温度或重复惩罚。 Risk: 缓存位置变化"
+    },
+    "adaptMinGain": {
+      "type": "string",
+      "enum": [
+        "default",
+        "1",
+        "1.2",
+        "1.5",
+        "2",
+        "3",
+        "4"
+      ],
+      "default": "default",
+      "description": "--adapt-min-gain: 专家交换最小收益比. 候选专家热度超过被替换者的倍数门槛；默认文档为 1.5。越高越保守。 Risk: 缓存位置变化"
+    },
+    "adaptAsync": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1"
+      ],
+      "default": "default",
+      "description": "--adapt-async: 异步专家缓存交换. 0 始终阻塞式交换；1 在验证窗口之间推进交换。仅适用支持的单 GPU RAM 模式；运行间不保证逐位一致。 Risk: 不可重复路径"
+    },
+    "adaptOverlap": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1"
+      ],
+      "default": "default",
+      "description": "STRATA_ADAPT_OVERLAP: 专家复制与窗口重叠. 在整个专家 arena 驻留 RAM 的单 GPU 路径，让复制与后续窗口重叠；不等同于 --adapt-async，不能和 async、pipeline、lag/nowait 等模式混用。 Risk: 资源/性能"
+    },
+    "prefillChunk": {
+      "type": "string",
+      "enum": [
+        "default",
+        "auto",
+        "auto:16384",
+        "auto:32768",
+        "256",
+        "512",
+        "1024",
+        "2048",
+        "4096",
+        "8192"
+      ],
+      "default": "default",
+      "description": "--prefill: 提示处理分块. auto 按可借用缓存选择分块；更大分块提高长提示吞吐的同时增加缓冲和专家暂借显存。大块不保证更快或逐位相同。 Risk: 资源/计算路径变化"
+    },
+    "kvGrow": {
+      "type": "string",
+      "enum": [
+        "default",
+        "off",
+        "on"
+      ],
+      "default": "default",
+      "description": "--kv-grow: KV 按实际长度增长. on 只为已达到的位置分配 KV，把空余显存暂给专家缓存；随上下文增长归还。只适用单 GPU 和专家 profile；不是扩大总 context。 Risk: 资源/性能"
+    },
+    "shortRead": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "16",
+        "32",
+        "64",
+        "128",
+        "256"
+      ],
+      "default": "default",
+      "description": "--short-read: 短增量走解码的阈值. 少于阈值的新文本 token 使用解码窗口代替批量 prefill；0 关闭。默认帮助为 64。会改变短请求的处理路径。 Risk: 资源/性能"
+    },
+    "prefillHeadAlias": {
+      "type": "string",
+      "enum": [
+        "default",
+        "off",
+        "on"
+      ],
+      "default": "default",
+      "description": "--prefill-head-alias: Prefill 临时卸载输出头. 读取新提示时卸载 native 输出头，释放提示缓冲后再加载；减少 prefill 显存需求但有重载成本。 Risk: 资源/性能"
+    },
+    "promptCache": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1",
+        "2",
+        "4",
+        "6",
+        "8",
+        "12"
+      ],
+      "default": "default",
+      "description": "--prompt-cache: 提示检查点数量. 在 RAM 中保留提示检查点；0 每次从头读。帮助估计每个约 118 MB，实际随架构和上下文变化。 Risk: 资源/性能"
+    },
+    "promptCacheEvery": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "4096",
+        "8192",
+        "16384",
+        "32768",
+        "65536"
+      ],
+      "default": "default",
+      "description": "--prompt-cache-every: 检查点间隔 (tokens). 每多少个新提示 token 追加检查点；0 关闭中途检查点。不是输出上限。 Risk: 资源/性能"
+    },
+    "promptCacheTail": {
+      "type": "string",
+      "enum": [
+        "default",
+        "off",
+        "on"
+      ],
+      "default": "default",
+      "description": "--prompt-cache-tail: 增加提示尾部检查点. 单 GPU 在提示结尾附近额外留一个块边界检查点；需要 prompt-cache 和 prompt-cache-every 均大于 0。 Risk: 资源/性能"
+    },
+    "promptCacheSpread": {
+      "type": "string",
+      "enum": [
+        "default",
+        "off",
+        "on"
+      ],
+      "default": "default",
+      "description": "--prompt-cache-spread: 分散保留历史检查点. 检查点向历史分散而非只保留最近几个，适合 Agent 改写历史前缀的情况；仍消耗 RAM。 Risk: 资源/性能"
+    },
+    "conversationMiB": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "256",
+        "512",
+        "1024",
+        "2048",
+        "4096",
+        "8192"
+      ],
+      "default": "default",
+      "description": "--conversation-cache-mib: 停放会话 RAM 预算 (MiB). 保存切换出去的会话状态，0 关闭停放。不是模型专家 RAM 预算；与专家、KV、系统共用物理内存。 Risk: 资源/性能"
+    },
+    "conversationSlots": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1",
+        "2",
+        "4",
+        "8"
+      ],
+      "default": "default",
+      "description": "--conversation-cache-slots: 停放会话数量. 最多保存多少个停放会话；不增加并发解码数，启动器仍是单路。 Risk: 资源/性能"
+    },
+    "conversationFloor": {
+      "type": "string",
+      "enum": [
+        "default",
+        "2048",
+        "2560",
+        "4096",
+        "6144",
+        "8192",
+        "12288"
+      ],
+      "default": "default",
+      "description": "--conversation-cache-min-free-mib: 会话缓存可用 RAM 底线 (MiB). 停放、保存、恢复会话时保留的可用 RAM 下限；不是启动器启动前的空闲检查。 Risk: 资源/性能"
+    },
+    "conversationMinTokens": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1024",
+        "4096",
+        "8192",
+        "16384",
+        "32768"
+      ],
+      "default": "default",
+      "description": "--conversation-cache-min-tokens: 最短可停放会话 (tokens). 短于此长度的会话不占停放槽位；0 不限制。 Risk: 资源/性能"
+    },
+    "conversationParkGain": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "256",
+        "512",
+        "1024",
+        "2048",
+        "4096"
+      ],
+      "default": "default",
+      "description": "--conversation-cache-park-gain: 会话快照最小增量 (tokens). 与旧快照相比至少增长这些 token 才重存；避免每个小回合复制整个长会话。 Risk: 资源/性能"
+    },
+    "pleIo": {
+      "type": "string",
+      "enum": [
+        "default",
+        "direct",
+        "mmap",
+        "ram"
+      ],
+      "default": "default",
+      "description": "--ple-io: PLE 码表读取方式. direct 直接 SSD 读取；mmap 由 OS 文件缓存管理；ram 把整张约 29GB 码表锁入 RAM。RAM 模式会与专家预算竞争，64GB 机器通常不适合同时保留大专家预算。 Risk: 可能大量占用 RAM"
+    },
+    "pleRowCache": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "65536",
+        "262144",
+        "524288",
+        "1048576",
+        "2097152",
+        "4194304"
+      ],
+      "default": "default",
+      "description": "--ple-row-cache: PLE 行缓存数量. 缓存已读码表行；帮助给出每行约 90B，默认 1048576。包含索引等实际开销，不是免费内存。 Risk: 资源/性能"
+    },
+    "pleInflight": {
+      "type": "string",
+      "enum": [
+        "default",
+        "16",
+        "32",
+        "64",
+        "128",
+        "256",
+        "512",
+        "1024"
+      ],
+      "default": "default",
+      "description": "--ple-inflight: PLE 并行读取数量. 未完成 SSD 读取的数量；增加不保证磁盘更快，可能增加延迟和队列压力。 Risk: 资源/性能"
+    },
+    "pleAutoMmap": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1"
+      ],
+      "default": "default",
+      "description": "STRATA_PLE_AUTO_MMAP: 慢直接读取自动转 mmap. 1 恢复启动探测发现 direct 慢时转 mmap 的规则；0 禁止自动转换。是否真的转换以日志为准。 Risk: 资源/性能"
+    },
+    "suffixDraft": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "3",
+        "4",
+        "5",
+        "6",
+        "8"
+      ],
+      "default": "default",
+      "description": "--suffix-draft: 提示重复查找最短匹配. 从上下文重复片段提出草稿；0 关闭此 lookup 路径。不是关闭全部 MTP 或 DFlash2。 Risk: 资源/性能"
+    },
+    "lookupMaxT": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "4",
+        "6",
+        "8",
+        "10",
+        "12",
+        "16"
+      ],
+      "default": "default",
+      "description": "--lookup-max-t: Lookup 最长验证窗口. 上限 16；0 关闭该扩展。每种额外窗口尺寸可能占约 20~35MiB 图显存，是否支持还取决于引擎窗口构建。 Risk: 资源/性能"
+    },
+    "lookupChain": {
+      "type": "string",
+      "enum": [
+        "default",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "default": "default",
+      "description": "--lookup-chain: MTP 后追加 Lookup 数. 实验性追加草稿，0 关闭；不是保证多输出几个正确 token。验证开销可能抵消收益。 Risk: 资源/性能"
+    },
+    "lookupChainMin": {
+      "type": "string",
+      "enum": [
+        "default",
+        "3",
+        "4",
+        "5",
+        "6",
+        "8"
+      ],
+      "default": "default",
+      "description": "--lookup-chain-min: 链式 Lookup 最短匹配. lookup-chain 追加所需的最短上下文匹配长度。 Risk: 资源/性能"
+    }
+  }
+}

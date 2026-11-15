@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {spawnSync} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
+import http from 'node:http';
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -13,11 +14,14 @@ function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "Strata 空格 ' "));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   fs.copyFileSync(path.join(source, 'launcher.mjs'), path.join(root, 'launcher.mjs'));
+  fs.copyFileSync(path.join(source, 'package.json'), path.join(root, 'package.json'));
   const modules = 'scripts/strata-panel';
   fs.mkdirSync(path.join(root, modules), {recursive: true});
-  for (const file of ['core.mjs', 'draft-options.mjs', 'engine-options.mjs', 'inspect.mjs', 'learning.mjs', 'sampling.mjs']) {
+  for (const file of ['core.mjs', 'draft-options.mjs', 'engine-options.mjs', 'engine-extra-options.mjs', 'engine-reference.json', 'inspect.mjs', 'learning.mjs', 'sampling.mjs']) {
     fs.copyFileSync(path.join(source, modules, file), path.join(root, modules, file));
   }
+  fs.copyFileSync(path.join(source,'scripts/parameters.mjs'),path.join(root,'scripts/parameters.mjs'));
+  fs.cpSync(path.join(source,'scripts/strata-lan'),path.join(root,'scripts/strata-lan'),{recursive:true});
 
   const write = (name, data = '') => {
     const file = path.join(root, name);
@@ -194,4 +198,81 @@ test('detect turns a found install into a config skeleton without touching conf'
   assert.deepEqual(found.config.profiles.map(profile => profile.profile), [f.profileFile.replaceAll('\\', '/')]);
   assert.deepEqual(JSON.parse(fs.readFileSync(f.configFile, 'utf8')), f.config);
   assert.match(f.call('detect').stderr, /needs at least one folder/);
+});
+
+test('1.1 parameter catalogue and validated edits preserve source model files; invalid edits never persist',t=>{
+  const f=fixture(t),sourceBefore=fs.readFileSync(f.profileFile);
+  const options=f.command('options');assert.equal(options.version,'1.1.0');assert.ok(options.engineOptions.length>40);
+  assert.ok(options.reference.entries.length>150);assert.equal(f.command('--version').version,'1.1.0');
+  const saved=f.command('set',f.profile.id,'engineOptions.tailSkip','0');
+  assert.equal(saved.value,'0');assert.equal(saved.restartRequired,true);assert.ok(fs.existsSync(saved.backup));
+  assert.equal(f.read(f.configFile).profiles[0].engineOptions.tailSkip,'0');
+  const prepared=f.command('prepare',f.profile.id);const run=f.read(path.join(prepared.directory,'run.json'));
+  assert.equal(f.read(run.config).env.STRATA_ROUTE_TAIL_SKIP,'0');
+  const before=fs.readFileSync(f.configFile);
+  for(const [key,value] of [['settings.context','1'],['settings.unknown','1'],['engineOptions.tailSkip','99'],['learning.unknown','1'],['profile.path','bad']]) {
+    assert.notEqual(f.call('set',f.profile.id,key,value).status,0);assert.deepEqual(fs.readFileSync(f.configFile),before);
+  }
+  assert.deepEqual(fs.readFileSync(f.profileFile),sourceBefore);assert.equal(fs.existsSync(f.configFile+'.lock'),false);
+});
+
+test('all curated settings reach a manifest; incompatible engines and learning modes fail offline',t=>{
+  const f=fixture(t);const catalogue=f.command('options');
+  for(const spec of catalogue.engineOptions) {
+    f.profile.engineOptions={[spec.key]:spec.values[1]};f.write('conf/launcher.json',f.config);
+    const result=f.command('prepare',f.profile.id);const run=f.read(path.join(result.directory,'run.json')),model=f.read(run.config);
+    if(spec.env)assert.equal(typeof model.env[spec.env],'string');
+    else if(spec.booleanFlag)assert.equal(model.user_args.includes(spec.flag),spec.values[1]==='on');
+    else assert.equal(model.user_args[model.user_args.indexOf(spec.flag)+1],spec.values[1]);
+  }
+  f.config.deployment.engineVersion='0.1.58';f.profile.engineOptions={tailSkip:'0'};f.write('conf/launcher.json',f.config);
+  assert.match(f.call('prepare',f.profile.id).stderr,/curated for engine/);
+  f.config.deployment.engineVersion='0.1.59';f.profile.learning={enabled:true};f.profile.engineOptions={adaptEvery:'0'};f.write('conf/launcher.json',f.config);
+  assert.match(f.call('prepare',f.profile.id).stderr,/learning/);
+  f.profile.engineOptions={};f.model.user_args=['--adapt-every','0'];f.write('assets/profile.json',f.model);f.write('conf/launcher.json',f.config);
+  assert.match(f.call('prepare',f.profile.id).stderr,/adaptation is disabled/);
+});
+
+test('LAN is opt-in and planning never starts a model or writes runtime state',t=>{
+  const f=fixture(t);
+  assert.match(f.call('lan-plan',f.profile.id).stderr,/LAN is disabled/);
+  f.config.lan={host:'127.0.0.1',port:8881,allowedClients:['127.0.0.1']};f.write('conf/launcher.json',f.config);
+  const plan=f.command('lan-plan',f.profile.id);assert.equal(plan.started,false);assert.equal(plan.upstream,'http://127.0.0.1:8180');
+  assert.equal(plan.terminal.readOnly,true);assert.equal(fs.existsSync(path.join(f.root,'runtime')),false);
+  f.config.lan.host='0.0.0.0';f.write('conf/launcher.json',f.config);assert.notEqual(f.call('lan-plan',f.profile.id).status,0);
+});
+
+test('LAN foreground lifecycle stops only its own bridge via token IPC and preserves upstream',async t=>{
+  const f=fixture(t);let model;
+  const upstream=http.createServer((req,res)=>{
+    const values={
+      '/health':{service:'strata',status:'ok',loaded:true,model,max_context:32768,images:false},
+      '/props':{model_alias:model,default_generation_settings:{n_ctx:32768,params:{n_predict:4096}},modalities:{vision:false}},
+      '/v1/models':{data:[{id:model}]},
+    };
+    res.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify(values[req.url] || {}));
+  });
+  await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));
+  const reserve=http.createServer();await new Promise(resolve=>reserve.listen(0,'127.0.0.1',resolve));
+  const port=reserve.address().port;await new Promise(resolve=>reserve.close(resolve));
+  f.profile.settings.port=upstream.address().port;f.config.lan={host:'127.0.0.1',port,allowedClients:['127.0.0.1']};f.write('conf/launcher.json',f.config);
+  model=f.command('check',f.profile.id).model;
+  const child=spawn(process.execPath,[path.join(f.root,'launcher.mjs'),'lan',f.profile.id],{cwd:os.tmpdir(),windowsHide:true});
+  let output='',stderr='';child.stderr.on('data',c=>stderr+=c);
+  const exited=new Promise(resolve=>child.once('close',resolve));
+  const timeout=setTimeout(()=>child.kill(),10000);
+  try {
+    const running=await new Promise((resolve,reject)=>{
+      child.stdout.on('data',c=>{output+=c;if(output.includes('\n')){try{resolve(JSON.parse(output.split('\n')[0]));}catch(error){reject(error);}}});
+      child.once('close',()=>reject(new Error(stderr || 'Bridge exited before ready')));
+    });
+    assert.equal(running.state,'listening');assert.equal(f.command('lan-status',running.id).state,'listening');
+    assert.equal((await(await fetch(`http://127.0.0.1:${port}/capabilities`)).json()).model,model);
+    const ownerPath=path.join(running.directory,'owner.json'),owner=f.read(ownerPath);
+    f.write(path.relative(f.root,ownerPath),{...owner,token:'wrong'});assert.match(f.call('lan-stop',running.id).stderr,/ownership/);
+    f.write(path.relative(f.root,ownerPath),owner);assert.equal(f.command('lan-stop',running.id).state,'stop-requested');
+    assert.equal(await exited,0,stderr);assert.equal(f.command('lan-status',running.id).state,'stopped');
+    assert.equal((await(await fetch(`http://127.0.0.1:${upstream.address().port}/health`)).json()).loaded,true);
+    assert.deepEqual(fs.readFileSync(f.profileFile),Buffer.from(JSON.stringify(f.model)));
+  } finally {clearTimeout(timeout);if(child.exitCode===null)child.kill();await exited;upstream.closeAllConnections();await new Promise(resolve=>upstream.close(resolve));}
 });

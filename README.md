@@ -1,78 +1,150 @@
-# Strata Launcher
+# Strata Launcher 1.1.0
 
-Start, check and stop a local [Strata](https://github.com/Niko1221/Strata) inference service on Windows from one JSON config. One profile per model build: install paths, port, memory gate, quant label, sampling, drafting, routing learning.
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-Everything is plain JSON in and JSON out, so an AI agent can drive it without a human in the loop. See [AGENTS.md](AGENTS.md) for the machine-facing runbook; Chinese version in [README.zh-CN.md](README.zh-CN.md).
+A portable, JSON-configured command-line launcher for [Strata](https://github.com/Niko1221/Strata) on Windows. Start and stop your own engine, tune model profiles, view terminal telemetry, and optionally share inference and capability discovery over a trusted private LAN.
+
+This is an independent launcher, **not Strata Desktop**, an engine distribution, or a model downloader. It does not include the original machine-specific WinForms panel, Pi plugins, watchdogs, credentials, or model weights.
+
+## What's New
+
+- **42 curated engine controls**, alongside context, KV, RAM/VRAM budgets, CPU workers, sampling, MTP/DFlash2 and routing learning. A **167-entry reference index** separates editable settings from protected/reference-only options.
+- `options` shows allowed choices and effective/inherited values. `set` validates edits, backs up the original config and saves for the **next launch**, without changing a running model.
+- Read-only **terminal monitoring**, locally or on another machine with Node.js. No browser or Python required on the monitoring client.
+- Opt-in **LAN forwarding**, live `/capabilities` discovery and a hash-verifiable downloadable terminal client. Exact source-IP allowlist; no model-management routes.
+- Config format stays `version: 1`; existing profiles do not need new fields. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Requirements
 
-- Windows, Node.js 22 or newer.
-- An installed Strata **Control** directory (`components/control/<version>`) whose `python/python.exe` can import `psutil`.
-- An installed Strata **engine** directory holding `strata.exe` (and `strata-vision.exe` for multimodal profiles).
-- One Strata model profile JSON per model: the file with the `args` array that names the GGUF shards, pack, expert route table, tokenizer and optional vision head. The launcher never copies or edits it; it reads it and launches against it.
+- Model host: Windows, Node.js **22+**, an existing Strata Control installation with `python/python.exe` and `psutil`, and a matching engine installation.
+- An existing compatible Strata model profile JSON containing its `args` array, pack, native weights, expert routing table, tokenizer, and optional vision head.
+- Extended engine controls are curated for **engine/Control 0.1.59** (the installation paired with Terminal **0.2.13**). These version numbers are **not interchangeable**. Explicit new advanced overrides are refused on other engine versions; inherited defaults remain available.
 
-Weights and models are yours. Keep the config and the model JSON wherever you like — this repository never needs them.
+No dependencies are installed into your Strata runtime. This release does not add a DeepSeek-specific, Basalt, or arbitrary GGUF backend. A model name alone is not proof of compatibility.
 
-## Quick start
+## Quick Start
 
 ```powershell
 .\Strata-Launcher.cmd doctor
-```
-
-`doctor` prints one JSON object and exits `3` if anything blocks a start. Every blocker is one entry in `problems[]` with a `section` and an `error`; the rest of the object describes what was found (Node version, resolved runtime paths, `psutil` probe, running engines, live runs, per-profile model/port). It never creates a run directory.
-
-With no `conf/launcher.json` yet, point `detect` at the folders that hold the install and the models:
-
-```powershell
 .\Strata-Launcher.cmd detect C:/Strata D:/Models
 ```
 
-It walks those folders (skipping `.git`, `node_modules`, `AppData`, `Windows`, …), keeps only real components — a Control version directory, an engine directory that contains `strata.exe`, a JSON with a Strata `args` array and resolvable weights — and prints a candidate config with a guessed quant per model and unique ports. Only the parts it cannot know are left `null` (usually `minimumFreeGiB`). Copy the `config` object to `conf/launcher.json`, fill in the nulls, run `doctor` again.
+`detect` prints a candidate `config`; it does not save or launch it. Review the detected Control/engine pairing and model paths, then put the config in `conf/launcher.json`. Alternatively, adapt [conf/launcher.example.json](conf/launcher.example.json). Replace all placeholders and `null` values, especially `minimumFreeGiB`.
 
-Then:
+Paths in launcher config are relative to that config file; asset paths inside the original Strata model profile must be absolute. Keep private `conf/launcher.json` out of Git.
 
 ```powershell
-node launcher.mjs list
+node launcher.mjs doctor my-model
 node launcher.mjs check my-model
-node launcher.mjs start my-model      # foreground; prints RUN_ID, log path, API URL
-node launcher.mjs status <RUN_ID>     # in another terminal
-node launcher.mjs stop <RUN_ID>
+node launcher.mjs prepare my-model
+node launcher.mjs start my-model
 ```
 
-`check` is fully offline: config, runtime files, model assets and GGUF shard completeness. `prepare <id>` writes the run directory (config, hashes, log location) without starting anything, for review. `start` runs in the foreground and owns the process; `stop` writes an ownership-token stop request that the runner honours. The service answers at `http://127.0.0.1:<port>/v1`. Actual load state is whatever `status` reports.
-
-Exit codes: `0` ok, `2` bad usage or config, `3` doctor says not ready, otherwise the engine's exit code.
-
-## Configuration
-
-Copy `conf/launcher.example.json` to `conf/launcher.json`. Paths are resolved relative to that file. `conf/launcher.schema.json` describes the shape for editors; the launcher validates every field itself and refuses anything unknown.
-
-`deployment` names the installed Control directory, the engine directory and the engine version. `profiles` holds one entry per model:
-
-| field | meaning |
-|---|---|
-| `id` | lowercase name you call the profile by |
-| `quant` | label used in the advertised model name — free text, e.g. `q4_k_xl`, `iq4_xs_v31` |
-| `slug` | optional model-name prefix; default comes from the model profile's `model_name` or file name |
-| `profile` | the Strata model profile JSON |
-| `minimumFreeGiB` | free system RAM required before the engine is admitted |
-
-`settings` may override `port`, `context`, `output`, `thinking`, `effort`, `kv`, `kvResident`, `expertGiB`, `headroomGiB`, `vramMiB`, `workers`, `spec`, `specMinP`, `drafting`, `visionThreads` and `imageTokens`; everything else is inherited from the model profile. `limits` replaces the default accepted range for any of those numbers when your model build legitimately needs a different one — `{ "context": [8192, 262144] }` — and is rejected if it does not bound a setting the launcher knows.
-
-`sampling`, `engineOptions`, `draftOptions` and `learning` are optional and documented by the schema. Routing learning is off by default; a learned profile is only reused when the model, modality, engine version, base profile and workload all match, and a stale or malformed one falls back to the base file.
-
-### Tuned drafters
-
-DFlash2 options (`draftOptions`) validate modes and keep MTP probability apart from drafter confidence. A **tuned** drafter pack is never inferred from a model name: declare it under `dflash2` — the pack file, the model it was built for, that model's quant, and the engine versions it was verified against. Anything else starts with the stock drafter. The gates in the example config are placeholders; replace them with what your drafter build actually is.
-
-## Tests
+`check` is offline and read-only. `prepare` writes an isolated run manifest without starting an engine. `start` runs in the foreground, printing the `RUN_ID`, log path and loopback API URL. Use another terminal:
 
 ```powershell
+node launcher.mjs status RUN_ID
+node launcher.mjs stop RUN_ID
+```
+
+Replace `RUN_ID` with the returned UUID. Stop uses an ownership-token request; it does not kill an unrelated model or guess a PID. Status is a recorded snapshot, not proof that a crashed process is still alive. Readiness is not a generation-quality test.
+
+## Tune and Save
+
+```powershell
+node launcher.mjs options
+node launcher.mjs options my-model
+node launcher.mjs set my-model settings.context 131072
+node launcher.mjs set my-model settings.kv k8v4
+node launcher.mjs set my-model settings.kvResident 16384
+node launcher.mjs set my-model sampling.mode custom
+node launcher.mjs set my-model sampling.temperature 0.7
+node launcher.mjs set my-model engineOptions.tailSkip 0
+node launcher.mjs set my-model learning.enabled true
+```
+
+Only supported `section.field` settings may be edited; `set` cannot change deployment paths or model identity. A rejected edit leaves the config unchanged. Successful edits return a backup path under `logs/config-backups`; the original Strata profile and installed files are untouched. Existing runs must be stopped and relaunched **explicitly** for changes to take effect.
+
+See [Parameter Guide](docs/PARAMETERS.md) / [参数说明](docs/PARAMETERS.zh-CN.md), the [JSON schema](conf/launcher.schema.json), and `options` for values, units, risks and inheritance. `default` means **inherit**, not disabled. Resource limits are validation ranges, not guaranteed physical memory. A zero VRAM reserve does not bypass Windows WDDM or guarantee full VRAM allocation.
+
+For DFlash2, set `settings.drafting` to `dflash2`; stock and tuned drafter packs are distinct. A tuned pack requires explicit `dflash2` model/quant/engine compatibility metadata and the actual pack file. The launcher never infers that compatibility from a filename. Thinking effort is independent of temperature and drafter selection.
+
+## Terminal Monitoring
+
+```powershell
+node launcher.mjs monitor my-model
+node launcher.mjs monitor my-model --once
+node launcher.mjs monitor --url http://192.168.1.10:8081
+```
+
+Interactive mode shows TG/PP, GPU/VRAM, RAM/CPU, system-wide disk traffic, context, cache/drafter information when reported, and recent request metadata. Press **q** or **Ctrl+C** to leave the monitor, without stopping the model. Missing values display `--`; unavailable or stale telemetry is not presented as live. Monitoring sends only `GET /metrics`.
+
+`monitor --once` emits JSON for scripts. Interactive monitoring needs a TTY. It is a lightweight client, **not the full upstream Strata TUI**; it does not weaken upstream monitor transport requirements.
+
+## Private LAN and Remote Pi
+
+The model stays bound to `127.0.0.1`. Forwarding is a separate foreground process and is disabled unless a `lan` block is configured and `lan` is explicitly started. For example, replace these sample addresses with your own:
+
+```json
+"lan": {
+  "host": "192.168.1.10",
+  "port": 8081,
+  "allowedClients": ["127.0.0.1", "192.168.1.20"]
+}
+```
+
+`host` must be an actual private/loopback IPv4 address on the server, not `0.0.0.0`. `allowedClients` accepts exact private/loopback IPv4 addresses only, not wildcards or subnets. The shipped example binds loopback only.
+
+```powershell
+node launcher.mjs lan-plan my-model
+node launcher.mjs lan my-model
+node launcher.mjs lan-status LAN_ID
+node launcher.mjs lan-stop LAN_ID
+```
+
+`lan-plan` starts nothing. `lan` returns its separate `LAN_ID`, endpoint URLs and client SHA-256. Stop the bridge with its ID or Ctrl+C; the model keeps running. A bridge is tied to the selected model identity; rediscover after changing settings or restarting with a different model.
+
+The server administrator must allow the selected TCP port **only from the intended client IPs**, on the Private network profile. The launcher does not create firewall rules or scheduled tasks. The client needs outbound access, not its own inbound listening port. Binding an address alone does not bypass Windows Firewall.
+
+### Connection Discovery
+
+Fetch `GET /capabilities` on connection. It checks live `/health`, `/props` and `/v1/models`, and returns the API model ID, canonical server model, actual context, image modality, advertised tools, generation defaults, fingerprint and Pi configuration hints. Matching hash-bound launcher settings can supply reasoning defaults; otherwise those fields are `null`, not guessed. A changed/unavailable model returns `503`.
+
+Use the returned model ID and context, not a hard-coded name or old config. Tool support is **server-advertised**, not a real tool-call test. This launcher does not install/configure Pi or migrate sessions, plugins and watchdog budgets.
+
+Allowed routes:
+
+| Method | Routes |
+|---|---|
+| GET | `/capabilities`, `/health`, `/props`, `/metrics`, `/v1/models`, `/v1/status`, `/v1/telemetry`, `/monitor-client.mjs` |
+| POST | `/v1/chat/completions`, `/v1/completions`, `/v1/messages` |
+
+Inference bodies must be JSON; streaming is forwarded without buffering. Load/unload, configuration, request-body logs and other management endpoints are not exposed. Access logs record time, IP, method and route, not prompts or answers; engine-local logging is governed separately by Strata.
+
+### Remote Terminal Client
+
+On the client machine, Node.js 22+ is sufficient:
+
+```powershell
+curl.exe --fail --noproxy "*" http://192.168.1.10:8081/monitor-client.mjs --output strata-monitor.mjs
+Get-FileHash .\strata-monitor.mjs -Algorithm SHA256
+node strata-monitor.mjs --url http://192.168.1.10:8081
+```
+
+Compare the hash with the **trusted server-side** `lan-plan`/`lan` result before executing the downloaded file. The standalone client also supports `--once` (text snapshot) and `--interval 2` (2-30 seconds). It can be copied separately; no local Strata install is needed.
+
+**Security boundary:** this bridge uses unencrypted HTTP, with IP filtering but **no TLS or API authentication**. It is for trusted private networks only. Never expose it to the internet or port-forward it on a router. Use a separately secured TLS/VPN/tunnel solution when network trust is insufficient. A checksum received over the same untrusted HTTP connection is not authentication.
+
+## Tests and Release Scope
+
+```powershell
+npm run schema:check
 npm test
-python -m pip install psutil==7.2.2
 npm run test:python
 ```
 
-Tests use temporary profile directories and fake processes; they need no GPU, no model and no network. They cover config validation, run isolation, ownership-token stop, shard/identity detection, learning-profile compatibility, sampling and option validation, and install detection.
+Python runner tests require a separate test interpreter with `psutil` (`python -m pip install psutil==7.2.2`); do not install it into someone else's Strata runtime to make tests pass. Tests use temporary files, fake assets/processes and bounded **loopback mock HTTP**. They need no GPU, weights, external API or model downloads.
 
-Publishable state: the launcher starts, checks and stops Strata through these tests only. Before trusting it on a real installation, run `doctor` and `check` there and confirm the rights on the parts reused from the upstream panel implementation. Upstream Strata is licensed separately ([Strata v0.2.13 license](https://github.com/Niko1221/Strata/blob/v0.2.13/LICENSE)); the launcher itself is MIT — see `LICENSE`.
+v1.1.0 validation: 37 Node tests and 22 Python tests passed locally on Windows, plus schema verification. Actual engine performance, every advanced option, cross-machine firewall connectivity and model generation were **not** retested by these mock tests. Start with `doctor`, `check`, a reviewed manifest and a short real workload on your installation.
+
+See [AGENTS.md](AGENTS.md) for automation, [CHANGELOG.md](CHANGELOG.md) for compatibility notes and [LICENSE](LICENSE) for reuse terms. Strata's own license applies separately; no vendor binaries or weights are distributed here.

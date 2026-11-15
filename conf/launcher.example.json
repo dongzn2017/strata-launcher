@@ -2,10 +2,11 @@
   "$schema": "./launcher.schema.json",
   "version": 1,
   "deployment": {
-    "controlDirectory": "C:/Strata/components/control/0.2.13",
-    "engineDirectory": "C:/Strata/components/engine/0.2.13-windows-x86_64-cuda-cuda13",
-    "engineVersion": "0.2.13"
+    "controlDirectory": "C:/Strata/components/control/0.1.59",
+    "engineDirectory": "C:/Strata/components/engine/0.1.59-windows-x86_64-cuda-cuda13",
+    "engineVersion": "0.1.59"
   },
+  "lan": {"host": "127.0.0.1", "port": 8081, "allowedClients": ["127.0.0.1"]},
   "profiles": [
     {
       "id": "example-text",
@@ -13,8 +14,11 @@
       "profile": "C:/Models/example/strata-text.json",
       "minimumFreeGiB": 45,
       "settings": {
-        "port": 8080
-      }
+        "port": 8080, "context": 131072, "kv": "k8v4", "expertGiB": 40,
+        "headroomGiB": 8, "vramMiB": 512, "workers": 5,
+        "output": 4096, "thinking": 1024, "effort": "medium"
+      },
+      "engineOptions": {"routePrior": "off", "tailSkip": "0", "prefillChunk": "default", "promptCache": "default"}
     },
     {
       "id": "example-tuned-drafting",
@@ -23,7 +27,7 @@
       "profile": "C:/Models/example/strata-vision.json",
       "minimumFreeGiB": 40,
       "settings": {
-        "port": 8081,
+        "port": 8082,
         "drafting": "dflash2"
       },
       "draftOptions": {
@@ -36,7 +40,7 @@
         "pack": "example-model-draft.q4_0-selq4.pack",
         "model": "example-model-ud-iq4_xs-v31",
         "quant": "iq4_xs_v31",
-        "engineVersions": ["0.2.13"]
+        "engineVersions": ["0.1.59"]
       },
       "limits": {
         "context": [32768, 262144]
