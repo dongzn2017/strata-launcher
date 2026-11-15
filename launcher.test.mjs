@@ -21,7 +21,12 @@ function fixture(t) {
     fs.copyFileSync(path.join(source, modules, file), path.join(root, modules, file));
   }
   fs.copyFileSync(path.join(source,'scripts/parameters.mjs'),path.join(root,'scripts/parameters.mjs'));
-  fs.cpSync(path.join(source,'scripts/strata-lan'),path.join(root,'scripts/strata-lan'),{recursive:true});
+  const lanModules='scripts/strata-lan';
+  fs.mkdirSync(path.join(root,lanModules),{recursive:true});
+  for(const file of ['bridge.mjs','capabilities.mjs','lifecycle.mjs','monitor-client.mjs']) {
+    fs.copyFileSync(path.join(source,lanModules,file),path.join(root,lanModules,file));
+    assert.ok(fs.statSync(path.join(root,lanModules,file)).isFile());
+  }
 
   const write = (name, data = '') => {
     const file = path.join(root, name);
@@ -242,7 +247,7 @@ test('LAN is opt-in and planning never starts a model or writes runtime state',t
   f.config.lan.host='0.0.0.0';f.write('conf/launcher.json',f.config);assert.notEqual(f.call('lan-plan',f.profile.id).status,0);
 });
 
-test('LAN foreground lifecycle stops only its own bridge via token IPC and preserves upstream',async t=>{
+test('LAN foreground lifecycle stops only its own bridge via token IPC and preserves upstream',{timeout:20000},async t=>{
   const f=fixture(t);let model;
   const upstream=http.createServer((req,res)=>{
     const values={
@@ -253,6 +258,7 @@ test('LAN foreground lifecycle stops only its own bridge via token IPC and prese
     res.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify(values[req.url] || {}));
   });
   await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));
+  t.after(()=>{upstream.closeAllConnections();upstream.close();});
   const reserve=http.createServer();await new Promise(resolve=>reserve.listen(0,'127.0.0.1',resolve));
   const port=reserve.address().port;await new Promise(resolve=>reserve.close(resolve));
   f.profile.settings.port=upstream.address().port;f.config.lan={host:'127.0.0.1',port,allowedClients:['127.0.0.1']};f.write('conf/launcher.json',f.config);
