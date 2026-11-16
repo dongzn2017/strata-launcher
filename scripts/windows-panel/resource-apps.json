@@ -1,0 +1,12 @@
+[
+  {"id":"chrome","label":"Google Chrome","process":"chrome"},
+  {"id":"edge","label":"Microsoft Edge","process":"msedge"},
+  {"id":"firefox","label":"Mozilla Firefox","process":"firefox"},
+  {"id":"discord","label":"Discord","process":"Discord"},
+  {"id":"steam","label":"Steam","process":"steam"},
+  {"id":"spotify","label":"Spotify","process":"Spotify"},
+  {"id":"epic","label":"Epic Games Launcher","process":"EpicGamesLauncher"},
+  {"id":"wechat","label":"WeChat / 微信","process":"WeChat"},
+  {"id":"qq","label":"QQ","process":"QQ"},
+  {"id":"wetype-update","label":"微信输入法更新器（仅进程）","process":"wetype_update"}
+]

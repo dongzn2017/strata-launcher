@@ -1,6 +1,6 @@
-# Agent Runbook: Strata Launcher 1.1.0
+# Agent Runbook: Strata Launcher 1.2.0
 
-This repository is a portable CLI, not the developer's machine-specific GUI. Read both the model-host boundaries and the command contract before acting. Never copy local credentials, real LAN addresses, runtime state, weights or Pi watchdog budgets into this repository.
+This repository contains a portable CLI and a Windows WinForms panel. The author's 5070/64GB preset is a settings snapshot, not a universal optimum or verified performance benchmark. Never copy local credentials, real LAN addresses, runtime state, weights or Pi watchdog budgets into this repository.
 
 ## Command Contract
 
@@ -32,7 +32,7 @@ node launcher.mjs lan-stop LAN_ID
 
 1. Run `doctor`; missing private config is expected initially. Ask which folders contain the existing Strata install/models if unknown; do not scan entire unrelated disks.
 2. Run bounded `detect PATH...`, inspect `candidateInstalls`, `unreadable`, `models_detail` and candidate `config`. Do not treat ambiguous pairing as established. Review paths and fill all nulls before writing `conf/launcher.json`.
-3. `deployment.engineVersion` is the **component** version, not the Terminal release. New advanced overrides target 0.1.59; they are not automatically valid on later/earlier engines.
+3. `deployment.engineVersion` is the **component** version, not the Terminal release. Advanced overrides target 0.1.59/0.1.60; other versions need review.
 4. Run `doctor PROFILE` and `check PROFILE`. Report exact blockers. Missing psutil/assets means an incomplete or wrong installation: do not install into a vendor runtime or fetch models without authorization. Busy ports, another engine or active run are not permission to stop anything.
 5. Inspect `options PROFILE` and `prepare PROFILE`. Only run `start` when authorized. Record absolute run/log paths and the returned UUID.
 6. `status` is a saved snapshot. Confirm live health/model before claiming readiness; a loaded model is not proof of successful generation or tool calling. Leave real inference testing to a separately authorized bounded workload.
@@ -63,3 +63,11 @@ node launcher.mjs lan-stop LAN_ID
 Run `npm run schema:check`, `npm test`, and `npm run test:python`. Python tests require an existing test interpreter with psutil. Tests use temporary fixtures and bounded loopback mock HTTP; no GPU, real models, external APIs, downloads, GUI launches or remote tasks are needed.
 
 Use the explicit package allowlist; inspect `npm pack --dry-run --json` before building. Exclude private `conf/launcher.json`, runtime, logs, credentials and weights. Do not commit, push, tag or publish a release automatically.
+
+## Windows Panel
+
+- `Strata-Panel.cmd` is a thin Git for Windows Bash bridge; `Strata-Panel.sh --launcher-dry-run` starts no GUI or inference. Existing `Strata-Launcher.cmd` remains the CLI entry. Read the selected config before launching anything.
+- Shared model settings are saved in private `conf/launcher.json` with validation, locking, concurrency checks and backups. Private UI preferences go under runtime. Do not publish private Pi entry/extension/skill paths from `conf/pi.json`.
+- Resource scan is read-only. Forced application termination requires explicit confirmation, a closed allowlist and PID/start-time/path/SID/session checks. Never auto-kill unknown processes, all WebView2 instances, DWM, models or Pi. Do not escalate privileges automatically.
+- Explorer stop is a separately confirmed action, with an owned recovery journal and explicit recovery button. Never use it as a UI test. Do not disable system services, update policies or scheduled tasks to prevent respawn.
+- Optional Pi uses the installed CLI and extension API, with actual live model/context/modality/alias checks. No package install, private internal hooks, credential migration or watchdog reset. External extensions remain responsible for their own behavior.

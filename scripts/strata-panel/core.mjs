@@ -99,8 +99,8 @@ export function check(request, deployment) {
   const advanced = engineOptions(request.engineOptions);
   const envOverrides = engineOverrides(advanced);
   const engineIdentity = engineOptionIdentity(advanced);
-  if (extraEngineOptionSpecs.some(spec => advanced[spec.key] !== 'default') && deployment.engineVersion !== '0.1.59') {
-    throw new Error('Extended engine options are curated for engine 0.1.59; leave them at default on other versions');
+  if (extraEngineOptionSpecs.some(spec => advanced[spec.key] !== 'default') && !['0.1.59','0.1.60'].includes(deployment.engineVersion)) {
+    throw new Error('Extended engine options are curated for engines 0.1.59/0.1.60; leave them at default on other versions');
   }
   if (advanced.pleIo === 'ram' && settings.expertGiB + settings.headroomGiB + 29 > os.totalmem()/2**30) {
     throw new Error('PLE RAM mode plus expert budget and headroom exceeds physical RAM');
@@ -122,7 +122,7 @@ export function check(request, deployment) {
   for (const [key, file] of Object.entries(assets)) {
     if (typeof file !== 'string' || !path.isAbsolute(file)) throw new Error(`${key}: expected an absolute asset path in ${request.profile}`);
     const stat = fs.statSync(file, {throwIfNoEntry: false});
-    if (!(stat?.isFile() || key === '--pack' && stat?.isDirectory())) throw new Error(`Missing ${key} asset: ${file}`);
+    if (!(stat?.isFile() || ['--pack','tokenizer'].includes(key) && stat?.isDirectory())) throw new Error(`Missing ${key} asset: ${file}`);
   }
   const sampling = samplingOptions(request.sampling, samplingDefaults(settings, profile.sampling));
   const routing = planLearning({baseFile: assets['--expert-profile'],

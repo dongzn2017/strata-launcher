@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import {engineOptionSpecs} from './strata-panel/engine-options.mjs';
 
-const schema={$schema:'https://json-schema.org/draft/2020-12/schema',title:'Curated Strata 0.1.59 engine options',
+const schema={$schema:'https://json-schema.org/draft/2020-12/schema',title:'Curated Strata 0.1.59/0.1.60 engine options',
   type:'object',additionalProperties:false,properties:Object.fromEntries(engineOptionSpecs.map(s=>[s.key,{
     type:'string',enum:s.values,default:'default',description:`${s.env || s.flag}: ${s.label}. ${s.hint} Risk: ${s.risk}`,
   }]))};

@@ -1,14 +1,49 @@
-# Strata Launcher 1.1.0
+# Strata Launcher 1.2.0
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A portable, JSON-configured command-line launcher for [Strata](https://github.com/Niko1221/Strata) on Windows. Start and stop your own engine, tune model profiles, view terminal telemetry, and optionally share inference and capability discovery over a trusted private LAN.
+A portable Windows GUI and JSON-configured CLI for [Strata](https://github.com/Niko1221/Strata). Tune model profiles, inspect VRAM, close selected apps, view terminal telemetry, configure an existing Pi, and share inference/capabilities over a trusted private LAN.
 
-This is an independent launcher, **not Strata Desktop**, an engine distribution, or a model downloader. It does not include the original machine-specific WinForms panel, Pi plugins, watchdogs, credentials, or model weights.
+This is an independent launcher, **not Strata Desktop**, an engine distribution, or a model downloader. Version 1.2.0 brings the author's WinForms panel into the portable repository, without private paths, credentials, chats, model weights, or machine-specific Pi plugins/watchdog state.
+
+## RTX 5070 + 64 GB: My Current Best Setup
+
+**The included IQ4_XS-v31 preset is the best configuration I have tuned so far for my own RTX 5070 12 GB + 64 GB machine and workloads.** It is not a universal optimum.
+
+I have observed **100+ tokens/s in some workloads when the VRAM expert cache is doing the work**. Breaking 100 on a single 5070 plus 64 GB feels fast. This is an **author-reported usage observation**, not a reproducible benchmark published with this release, a sustained-speed guarantee, GPU utilization, or draft acceptance percentage. Prompt length, cache hits, drafting acceptance, output type and background GPU usage matter. No new throughput benchmark was run to publish this launcher.
+
+[Exact preset](conf/presets/rtx5070-64g.iq4-xs-v31.json) · [Tuning notes and trade-offs](docs/RTX5070-64G.zh-CN.md)
+
+| Saved setting | Value |
+|---|---|
+| Model | Qwen3.8-Flash-Next / Unsloth UD-IQ4_XS v3.1, vision |
+| Strata / engine | Terminal 0.2.14 / CUDA13 engine 0.1.60 |
+| Context / GPU KV | 131072 / 28672 tokens, k8v4 |
+| Expert RAM / headroom | 44 / 6 GiB |
+| VRAM reserve / CPU workers | 168 MiB / 5 |
+| Drafting | tuned DFlash2, auto, confidence 0.8 |
+| Output / thinking | 14336 / 3072, medium |
+
+168 MiB is an aggressive user reserve, not the total driver/engine reserve. Lower the RAM budget or increase VRAM reserve when needed. `kvGrow=on` is a request and can be disabled by the engine with KV streaming. Saved manual window 4 is inactive in auto mode. Inherited tail skip is **not** proof of full-expert/lossless inference.
+
+## Windows Panel
+
+First configure `conf/launcher.json` as below. Install Git for Windows and Node.js 22+ separately, then double-click **`Strata-Panel.cmd`** or run `npm run panel`. The CLI remains available and unchanged in purpose.
+
+![Resource controls](docs/images/resources.png)
+
+- Almost all everyday tuning is exposed: context, KV, RAM/VRAM, CPU, sampling, thinking, MTP/DFlash2, routing learning, plus **42 curated advanced controls** and a **162-entry engine reference**. Protected engine flags are deliberately read-only, not arbitrary command injection.
+- **VRAM scan works**: NVML whole-card totals plus per-process WDDM counters (>10 MiB), separated by adapter identity. Counters can be inaccurate/shared and must not be summed into whole-card usage.
+- **Selected-process termination works**: normal close by default; optional confirmed force-close of exact allowlisted PID/start-time/path/user/session targets, including the WeType updater. Unknown processes, DWM, model/Pi and generic WebView2 are not mass-killed.
+- Separate **stop/restore Explorer desktop** buttons. Normal panel exit attempts owned desktop recovery; crash recovery is Task Manager (`Ctrl+Shift+Esc`) → Run new task → `explorer.exe`. File operations can be interrupted. It does not disable Windows auto-restart, updates, services or scheduled tasks.
+- The old visual-recovery-journal bug is fixed: an earlier panel's journal is preserved and visual changes skipped, rather than blocking an independent confirmed app close. Failed closes show errors and prevent automatic model loading.
+- GUI and CLI share model settings in private `conf/launcher.json`, with validation/backups. Resource selections and Pi UI choices remain private runtime state. No actual cleaning or desktop stop was performed by release self-tests.
+
+For Pi, copy `conf/pi.example.json` to private `conf/pi.json`, set the installed Pi entry script and optional existing extension/skill paths. Nothing is installed or copied from another user's Pi. The panel verifies actual context, vision and model alias before opening Pi; generation/compaction behavior of your external plugins remains their responsibility. The public adapter uses Pi's CLI/extension API, not the author's private Pi internals; live Pi integration must be tested on your installed version.
 
 ## What's New
 
-- **42 curated engine controls**, alongside context, KV, RAM/VRAM budgets, CPU workers, sampling, MTP/DFlash2 and routing learning. A **167-entry reference index** separates editable settings from protected/reference-only options.
+- **Windows GUI, process management and VRAM inspection**, plus the author's current 5070/64GB preset; **42 engine controls / 162 reference entries**, including `auto:8192` prefill.
 - `options` shows allowed choices and effective/inherited values. `set` validates edits, backs up the original config and saves for the **next launch**, without changing a running model.
 - Read-only **terminal monitoring**, locally or on another machine with Node.js. No browser or Python required on the monitoring client.
 - Opt-in **LAN forwarding**, live `/capabilities` discovery and a hash-verifiable downloadable terminal client. Exact source-IP allowlist; no model-management routes.
@@ -18,7 +53,7 @@ This is an independent launcher, **not Strata Desktop**, an engine distribution,
 
 - Model host: Windows, Node.js **22+**, an existing Strata Control installation with `python/python.exe` and `psutil`, and a matching engine installation.
 - An existing compatible Strata model profile JSON containing its `args` array, pack, native weights, expert routing table, tokenizer, and optional vision head.
-- Extended engine controls are curated for **engine/Control 0.1.59** (the installation paired with Terminal **0.2.13**). These version numbers are **not interchangeable**. Explicit new advanced overrides are refused on other engine versions; inherited defaults remain available.
+- Extended controls target **engine/Control 0.1.59 and 0.1.60** (Terminal **0.2.13 and 0.2.14**). These version numbers are **not interchangeable**. Other engines require review before explicit advanced overrides; inherited defaults remain available.
 
 No dependencies are installed into your Strata runtime. This release does not add a DeepSeek-specific, Basalt, or arbitrary GGUF backend. A model name alone is not proof of compatibility.
 
@@ -145,6 +180,6 @@ npm run test:python
 
 Python runner tests require a separate test interpreter with `psutil` (`python -m pip install psutil==7.2.2`); do not install it into someone else's Strata runtime to make tests pass. Tests use temporary files, fake assets/processes and bounded **loopback mock HTTP**. They need no GPU, weights, external API or model downloads.
 
-v1.1.0 validation: 37 Node tests and 22 Python tests passed locally on Windows, plus schema verification. Actual engine performance, every advanced option, cross-machine firewall connectivity and model generation were **not** retested by these mock tests. Start with `doctor`, `check`, a reviewed manifest and a short real workload on your installation.
+v1.2.0 validation: Node/Python offline tests, schema verification, read-only real VRAM inspection and Windows GUI/resource tests at 100/125/150/200% scaling. A single real WeType updater PID was successfully terminated during the local bug fix, not by release self-tests. Explorer termination is covered with mocks, not a destructive desktop test. Throughput, live public-Pi integration and cross-machine firewall connectivity were **not** retested for this release. Start with `doctor`, `check` and a reviewed short workload on your installation.
 
 See [AGENTS.md](AGENTS.md) for automation, [CHANGELOG.md](CHANGELOG.md) for compatibility notes and [LICENSE](LICENSE) for reuse terms. Strata's own license applies separately; no vendor binaries or weights are distributed here.

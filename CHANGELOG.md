@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0
+
+- Portable Windows WinForms panel adapted from the author's daily launcher; the existing JSON CLI remains supported.
+- Shared, validated model settings; per-profile tuning, sampling, thinking, KV, CPU, learning, MTP/DFlash2 and 42 advanced controls. Reference baseline updated to engine 0.1.60 (162 entries); explicit controls support 0.1.59/0.1.60. Added `auto:8192` prefill.
+- NVML/WDDM VRAM scan; explicitly confirmed allowlisted app/background termination; separate Explorer desktop stop/restore with recovery journal. No automatic system-service/update-policy changes or generic WebView2/unknown-process kill.
+- Fix: a foreign visual recovery journal now skips visual changes without blocking independently confirmed app termination. Per-process errors and new-process observations are visible; failed closes prevent automatic model loading.
+- Local/remote terminal monitor and GUI LAN buttons, reusing exact-IP private HTTP forwarding. No firewall rules or scheduled tasks are installed; stopping/closing a monitor does not stop inference.
+- Optional existing-Pi CLI/extension adapter; configurable external extensions/skills. No private Pi internals, package installs, credential/session migration or watchdog-budget changes. Real public-Pi end-to-end use is not validated by this release's mock tests.
+- Included exact sanitized author preset: RTX 5070 12GB + 64GB, IQ4_XS-v31 vision, context 128K, GPU KV 28K k8v4, expert RAM 44 GiB, headroom 6 GiB, VRAM reserve 168 MiB, workers 5, tuned DFlash2 auto. Author describes it as their current best self-tuned setup; 100+ tokens/s is a user-reported favorable-workload observation, not a release benchmark or guarantee.
+- Fixed tokenizer directory acceptance in the portable backend. Original Strata files and model weights remain unchanged.
+- Validation: 44 offline Node tests, 22 Python tests, schema checks, local GUI snapshots and resource-page checks at 100/125/150/200%; no new throughput benchmark, destructive Explorer test or cross-machine firewall test.
+
 ## 1.1.0
 
 ### Added / 新增

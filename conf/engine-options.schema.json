@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Curated Strata 0.1.59 engine options",
+  "title": "Curated Strata 0.1.59/0.1.60 engine options",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -152,7 +152,7 @@
         "measure"
       ],
       "default": "default",
-      "description": "--pool-affinity: CPU 专家线程亲和性. all 每物理核心一个 worker；auto 优先 P 核；p-cores 仅 P 核及其 SMT；measure 在启动时做短测再选。请按实际 CPU 的 P/E 核和 SMT 结构选择。 Risk: 资源/性能"
+      "description": "--pool-affinity: CPU 专家线程亲和性. all 每物理核心一个 worker；auto 优先 P 核；p-cores 仅 P 核及其 SMT；measure 在启动时做短测再选。9600X 无 P/E 混合结构。 Risk: 资源/性能"
     },
     "poolTasks": {
       "type": "string",
@@ -279,6 +279,7 @@
       "enum": [
         "default",
         "auto",
+        "auto:8192",
         "auto:16384",
         "auto:32768",
         "256",
@@ -289,7 +290,7 @@
         "8192"
       ],
       "default": "default",
-      "description": "--prefill: 提示处理分块. auto 按可借用缓存选择分块；更大分块提高长提示吞吐的同时增加缓冲和专家暂借显存。大块不保证更快或逐位相同。 Risk: 资源/计算路径变化"
+      "description": "--prefill: 提示处理分块. auto 按可借用缓存选择分块；auto:8192 限制自动分块上限为 8192，适合先排查大块缓冲压力。更大分块增加缓冲和专家暂借显存；pinned-memory-exhausted 是页锁定 RAM 申请失败，不应据此增大专家 RAM。大块不保证更快或逐位相同。 Risk: 资源/计算路径变化"
     },
     "kvGrow": {
       "type": "string",
@@ -299,7 +300,7 @@
         "on"
       ],
       "default": "default",
-      "description": "--kv-grow: KV 按实际长度增长. on 只为已达到的位置分配 KV，把空余显存暂给专家缓存；随上下文增长归还。只适用单 GPU 和专家 profile；不是扩大总 context。 Risk: 资源/性能"
+      "description": "--kv-grow: KV 按实际长度增长. on 请求按实际长度增长 KV，把空余显存暂给专家缓存；随上下文增长归还。还要求单 GPU、专家 profile、全部 KV 在显存及专家在 RAM 等条件；KV streaming 时可能被引擎关闭，以日志为准。不是扩大总 context。 Risk: 资源/性能"
     },
     "shortRead": {
       "type": "string",

@@ -1,8 +1,8 @@
 {
-  "engineVersion": "0.1.59",
-  "controlVersion": "0.1.59",
-  "sourceCommit": "d2f096475817d4666c364c820b0ca830f751cfc5",
-  "helpSHA256": "d93b6fd4d56b6d54ca66a868a135842973d715e79ba8ac13a35a2a8990b956d3",
+  "engineVersion": "0.1.60",
+  "controlVersion": "0.1.60",
+  "sourceCommit": "4d3e390b2fc8d24c846b973f6f28485b986600ba",
+  "helpSHA256": "318a1621d9e9e749a4e08d9b46ff257d879d79ab374b9793aabb433e4a12e8bc",
   "source": "Installed strata.exe --help + installed Control tune_knobs/speed_switches + curated documented options",
   "entries": [
     {
@@ -147,7 +147,7 @@
       "label": "KV 按实际长度增长",
       "group": "提示 / KV",
       "risk": "资源/性能",
-      "hint": "on 只为已达到的位置分配 KV，把空余显存暂给专家缓存；随上下文增长归还。只适用单 GPU 和专家 profile；不是扩大总 context。"
+      "hint": "on 请求按实际长度增长 KV，把空余显存暂给专家缓存；随上下文增长归还。还要求单 GPU、专家 profile、全部 KV 在显存及专家在 RAM 等条件；KV streaming 时可能被引擎关闭，以日志为准。不是扩大总 context。"
     },
     {
       "name": "--stream-token",
@@ -717,7 +717,7 @@
     },
     {
       "name": "--trim-stage-weights",
-      "description": "--trim-stage-weights an explicit --layer-split: each GPU loads only its own layers' dense weights",
+      "description": "--trim-stage-weights a layer split (the default): each GPU loads only its own layers' dense weights",
       "editable": false,
       "booleanFlag": false,
       "label": "",
@@ -780,7 +780,7 @@
     },
     {
       "name": "--short-read",
-      "description": "--short-read N       --serve: read at most N fresh text tokens through the decode windows instead\nof the batched prompt path (default 64, 0 = off)",
+      "description": "--short-read N       --serve: read at most N fresh text tokens through the decode windows instead\nof the batched prompt path (default 64, or 24 on Windows Strix Halo with a\nUD-Q4_K_XL set, where the batched path is quicker from 26 tokens; 0 = off)",
       "editable": true,
       "key": "shortRead",
       "booleanFlag": false,
@@ -1023,7 +1023,7 @@
       "label": "提示处理分块",
       "group": "提示 / KV",
       "risk": "资源/计算路径变化",
-      "hint": "auto 按可借用缓存选择分块；更大分块提高长提示吞吐的同时增加缓冲和专家暂借显存。大块不保证更快或逐位相同。"
+      "hint": "auto 按可借用缓存选择分块；auto:8192 限制自动分块上限为 8192，适合先排查大块缓冲压力。更大分块增加缓冲和专家暂借显存；pinned-memory-exhausted 是页锁定 RAM 申请失败，不应据此增大专家 RAM。大块不保证更快或逐位相同。"
     },
     {
       "name": "--prefill-pipe",
@@ -1360,6 +1360,16 @@
       "hint": "off 保持创建时分配；auto 尝试放到主线程 SMT 兄弟及没有 worker 的核心。没有空闲核心时不会强行挪动。"
     },
     {
+      "name": "--no-trim-stage-weights",
+      "description": "--no-trim-stage-weights  a layer split: every card keeps the dense weights of all the layers,\nas before.  By default each card keeps only those of the layers it runs\nand the VRAM this frees goes to its expert cache.",
+      "editable": false,
+      "booleanFlag": false,
+      "label": "",
+      "group": "参考 / 受保护",
+      "risk": "路径、生命周期、多卡、诊断或由其他页面管理；此处只读",
+      "hint": ""
+    },
+    {
       "name": "--pool-affinity",
       "description": "--pool-affinity MODE Worker CPU affinity: all (default: one worker per physical core, as\nalways), auto (hybrid CPUs: P-cores first, then their SMT siblings,\nthen E-cores) or p-cores (P-cores and their siblings only).  measure (opt-in,\nhybrid CPUs, native packs): all and p-cores are timed on the pack's own experts\nat start (about a second) and the faster one is taken",
       "editable": true,
@@ -1506,68 +1516,8 @@
       "hint": "old 使用旧探测规则，auto 允许运行时按 CPU 成本调整。显式 --pcie-frac 优先。"
     },
     {
-      "name": "DS4_DEFAULTS",
-      "description": "Reads long prompts faster and loads the parts of the model it needs faster. Turn off if DeepSeek stops working or its answers look wrong; it then runs as in version 0.2.6.",
-      "editable": false,
-      "booleanFlag": false,
-      "label": "",
-      "group": "参考 / 受保护",
-      "risk": "路径、生命周期、多卡、诊断或由其他页面管理；此处只读",
-      "hint": ""
-    },
-    {
-      "name": "DS4_FAST_ATTN",
-      "description": "Reads long prompts faster and loads the parts of the model it needs faster. Turn off if DeepSeek stops working or its answers look wrong; it then runs as in version 0.2.6.",
-      "editable": false,
-      "booleanFlag": false,
-      "label": "",
-      "group": "参考 / 受保护",
-      "risk": "路径、生命周期、多卡、诊断或由其他页面管理；此处只读",
-      "hint": ""
-    },
-    {
-      "name": "DS4_ATTN_SLAB",
-      "description": "Reads long prompts faster and loads the parts of the model it needs faster. Turn off if DeepSeek stops working or its answers look wrong; it then runs as in version 0.2.6.",
-      "editable": false,
-      "booleanFlag": false,
-      "label": "",
-      "group": "参考 / 受保护",
-      "risk": "路径、生命周期、多卡、诊断或由其他页面管理；此处只读",
-      "hint": ""
-    },
-    {
-      "name": "DS4_COPY_PIN",
-      "description": "Reads long prompts faster and loads the parts of the model it needs faster. Turn off if DeepSeek stops working or its answers look wrong; it then runs as in version 0.2.6.",
-      "editable": false,
-      "booleanFlag": false,
-      "label": "",
-      "group": "参考 / 受保护",
-      "risk": "路径、生命周期、多卡、诊断或由其他页面管理；此处只读",
-      "hint": ""
-    },
-    {
-      "name": "DS4_COPY_HUGETLB",
-      "description": "Reads long prompts faster and loads the parts of the model it needs faster. Turn off if DeepSeek stops working or its answers look wrong; it then runs as in version 0.2.6.",
-      "editable": false,
-      "booleanFlag": false,
-      "label": "",
-      "group": "参考 / 受保护",
-      "risk": "路径、生命周期、多卡、诊断或由其他页面管理；此处只读",
-      "hint": ""
-    },
-    {
-      "name": "DS4_STORE_SPARE",
-      "description": "Reads long prompts faster and loads the parts of the model it needs faster. Turn off if DeepSeek stops working or its answers look wrong; it then runs as in version 0.2.6.",
-      "editable": false,
-      "booleanFlag": false,
-      "label": "",
-      "group": "参考 / 受保护",
-      "risk": "路径、生命周期、多卡、诊断或由其他页面管理；此处只读",
-      "hint": ""
-    },
-    {
-      "name": "DS4_STORE_PUT",
-      "description": "Reads long prompts faster and loads the parts of the model it needs faster. Turn off if DeepSeek stops working or its answers look wrong; it then runs as in version 0.2.6.",
+      "name": "STRATA_VISION_TOWER",
+      "description": "Which program turns pictures into something the model can read. Strata's own is faster on most computers and reads very large pictures correctly; on a few graphics cards where it is still slower, Strata uses llama.cpp's by itself. Choose llama.cpp's if pictures look misread.",
       "editable": false,
       "booleanFlag": false,
       "label": "",

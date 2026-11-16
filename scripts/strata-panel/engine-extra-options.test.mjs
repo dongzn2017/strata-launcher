@@ -5,7 +5,7 @@ import {engineOptionSpecs,engineOptions,engineOverrides,engineOptionIdentity,app
 
 test('curated options have choices, explanations, risks and source entries; no runtime is required', () => {
   const reference=JSON.parse(fs.readFileSync(new URL('./engine-reference.json',import.meta.url),'utf8'));
-  assert.equal(reference.engineVersion,'0.1.59');assert.ok(reference.entries.length>150);
+  assert.equal(reference.engineVersion,'0.1.60');assert.ok(reference.entries.length>150);
   assert.equal(new Set(engineOptionSpecs.map(s=>s.key)).size,engineOptionSpecs.length);
   for(const s of engineOptionSpecs) {
     assert.ok(s.group && s.label && s.hint.length>20 && s.risk);assert.equal(s.values[0],'default');

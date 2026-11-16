@@ -1,0 +1,93 @@
+{
+  "id": "iq4xsv31-vision",
+  "quant": "iq4_xs_v31",
+  "slug": "qwen-flash-next",
+  "profile": "C:/Models/Qwen3.8-Flash-Next-UD-IQ4_XS-v31/profiles/strata-ud-iq4_xs-v31-vision.json",
+  "minimumFreeGiB": 45,
+  "settings": {
+    "imageTokens": 300,
+    "output": 14336,
+    "vramMiB": 168,
+    "visionThreads": 1,
+    "thinking": 3072,
+    "context": 131072,
+    "workers": 5,
+    "kvResident": 28672,
+    "specMinP": 0.5,
+    "effort": "medium",
+    "kv": "k8v4",
+    "headroomGiB": 6,
+    "drafting": "dflash2",
+    "spec": 2,
+    "port": 8080,
+    "expertGiB": 44
+  },
+  "engineOptions": {
+    "prefillCpuShare": "default",
+    "adaptMinGain": "default",
+    "lookupMaxT": "default",
+    "adaptSwaps": "default",
+    "pcieFrac": "default",
+    "noHostWorker": "default",
+    "promptCacheEvery": "default",
+    "promptCacheTail": "default",
+    "suffixDraft": "default",
+    "prefillHeadAlias": "default",
+    "conversationMiB": "default",
+    "promptCacheSpread": "default",
+    "adaptDecay": "default",
+    "prefillChunk": "default",
+    "tailSkip": "default",
+    "pleIo": "default",
+    "pleRowCache": "default",
+    "conversationParkGain": "default",
+    "lookupChain": "default",
+    "adaptAsync": "default",
+    "tailSkipMaxCached": "default",
+    "poolTasks": "default",
+    "conversationMinTokens": "default",
+    "pcieKRule": "default",
+    "routePrior": "off",
+    "pleInflight": "default",
+    "pcieDefault": "default",
+    "poolAffinity": "default",
+    "hostCore": "default",
+    "conversationSlots": "default",
+    "shortRead": "default",
+    "auxCpus": "default",
+    "kva": "off",
+    "conversationFloor": "default",
+    "promptCache": "default",
+    "pcieShareMax": "default",
+    "lookupChainMin": "default",
+    "vramFree": "device",
+    "kvGrow": "on",
+    "adaptEvery": "default",
+    "adaptOverlap": "default",
+    "pleAutoMmap": "default"
+  },
+  "draftOptions": {
+    "pack": "tuned",
+    "confidence": 0.8,
+    "mode": "auto",
+    "window": 4
+  },
+  "sampling": {
+    "mode": "model"
+  },
+  "learning": {
+    "reuse": true,
+    "scope": "general",
+    "saveEveryMinutes": 5,
+    "enabled": true
+  },
+  "dflash2": {
+    "pack": "qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack",
+    "model": "qwen3.8-flash-next-unsloth-ud-iq4_xs-v31",
+    "quant": "iq4_xs_v31",
+    "engineVersions": [
+      "0.1.59",
+      "0.1.60"
+    ]
+  }
+}

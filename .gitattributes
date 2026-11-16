@@ -1,3 +1,4 @@
 * text=auto
 *.cmd text eol=crlf
+*.sh text eol=lf
 conf/engine-options.schema.json text eol=lf

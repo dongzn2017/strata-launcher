@@ -207,8 +207,8 @@ test('detect turns a found install into a config skeleton without touching conf'
 
 test('1.1 parameter catalogue and validated edits preserve source model files; invalid edits never persist',t=>{
   const f=fixture(t),sourceBefore=fs.readFileSync(f.profileFile);
-  const options=f.command('options');assert.equal(options.version,'1.1.0');assert.ok(options.engineOptions.length>40);
-  assert.ok(options.reference.entries.length>150);assert.equal(f.command('--version').version,'1.1.0');
+  const options=f.command('options');assert.equal(options.version,'1.2.0');assert.ok(options.engineOptions.length>40);
+  assert.ok(options.reference.entries.length>150);assert.equal(f.command('--version').version,'1.2.0');
   const saved=f.command('set',f.profile.id,'engineOptions.tailSkip','0');
   assert.equal(saved.value,'0');assert.equal(saved.restartRequired,true);assert.ok(fs.existsSync(saved.backup));
   assert.equal(f.read(f.configFile).profiles[0].engineOptions.tailSkip,'0');

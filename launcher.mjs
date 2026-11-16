@@ -10,7 +10,7 @@ import {lanOptions,clientInfo} from './scripts/strata-lan/bridge.mjs';
 import {serveBridge,bridgeCommand} from './scripts/strata-lan/lifecycle.mjs';
 import {main as monitor,snapshot,endpoint} from './scripts/strata-lan/monitor-client.mjs';
 
-const configFile = path.join(root, 'conf/launcher.json');
+export const configFile = path.join(root, 'conf/launcher.json');
 const usage = 'Usage:\n' +
   '  node launcher.mjs doctor [PROFILE]        report the environment as one JSON object\n' +
   '  node launcher.mjs detect PATH...          find a Strata install and model profiles, print a candidate config\n' +
@@ -37,7 +37,7 @@ function configPath(value, key) {
   return path.resolve(path.dirname(configFile), value);
 }
 
-function loadConfig(provided) {
+export function loadConfig(provided) {
   let config;
   try {
     config = provided === undefined ? read(configFile) : provided;
@@ -255,7 +255,7 @@ async function main([command, id, ...extra]) {
   process.exitCode = code ?? 1;
 }
 
-try {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.join(root,'launcher.mjs')) try {
   const result = await main(process.argv.slice(2));
   if (result !== undefined) console.log(JSON.stringify(result, null, 2));
 } catch (error) {
