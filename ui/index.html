@@ -118,10 +118,50 @@ details.json pre { background: #070a12; border: 1px solid var(--line); border-ra
   padding: 16px; overflow: auto; max-height: 420px;
   font: 12px/1.7 ui-monospace, Consolas, monospace; color: #9fb0c8; }
 
+.tune { color-scheme: dark; margin: auto; width: min(780px, calc(100% - 24px)); max-width: none;
+  max-height: min(820px, calc(100dvh - 24px)); color: #edf3f0; background: #15201e;
+  border: 1px solid #3d504c; border-radius: 8px; }
+.tune::backdrop { background: rgb(6 12 14 / 78%); }
+.tune[open] { display: grid; grid-template-rows: auto auto minmax(0,1fr) auto; }
+.tune-head, .tune-nav, .tune-body, .tune-footer { padding-inline: 22px; min-width: 0; }
+.tune-head, .tune-footer { padding-block: 14px; }
+.tune-head { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+.tune-head h2 { font-size: 18px; overflow-wrap: anywhere; }
+.tune-head p, .tune-hint, .tune-footer p { color: #b3c6bd; font-size: 13px; overflow-wrap: anywhere; }
+.tune-nav { display: flex; flex-wrap: wrap; gap: 5px; border-bottom: 1px solid #3d504c; }
+.tune button { border-radius: 6px; padding: 6px 12px; transform: none; }
+.tune-nav button { background: transparent; color: #c3d3ce; }
+.tune-nav button[aria-pressed="true"] { background: #324641; color: #edf3f0; }
+.tune-body { overflow: auto; overscroll-behavior: contain; min-height: 0; padding-block: 16px; }
+.tune-group { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 16px; margin-bottom: 18px; }
+.tune-group h3 { grid-column: 1 / -1; font-size: 14px; color: #b4ded1; }
+.tune-field { min-width: 0; display: grid; align-content: start; gap: 4px; font-size: 14px; }
+.tune-field strong { font-weight: 500; overflow-wrap: anywhere; }
+.tune input:not([type="checkbox"]), .tune select { min-width: 0; width: 100%; padding: 6px 9px;
+  min-height: 36px; border: 1px solid #50615d; border-radius: 5px;
+  color: #edf3f0; background: #101a18; font: inherit; }
+.tune input[type="checkbox"] { justify-self: start; width: 18px; height: 18px; accent-color: #67cdb6; }
+.tune input:disabled, .tune select:disabled { opacity: .58; }
+.tune-field[data-changed] strong { color: #7dd9c5; }
+.tune-engine .tune-field { grid-template-columns: minmax(0,1fr) minmax(120px,32%); align-items: center;
+  padding: 10px 0; border-bottom: 1px solid #34443f; }
+.tune-engine .tune-field .tune-hint { grid-column: 1 / -1; }
+.tune-engine-search { margin-bottom: 12px; }
+.tune-footer { border-top: 1px solid #3d504c; }
+.tune-footer p { margin-bottom: 7px; }
+.tune-footer .err { color: #ffbeae; }
+.tune-footer .tune-save { background: #77cfb9; color: #0d221d; font-weight: 600; }
+.tune [hidden] { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
 @media (max-width: 640px) { .grid, .rungrid, .envgrid { grid-template-columns: 1fr; } }
+@media (max-width: 500px) {
+  .tune-head, .tune-nav, .tune-body, .tune-footer { padding-inline: 12px; }
+  .tune-group { grid-template-columns: 1fr; }
+  .tune-engine .tune-field { grid-template-columns: minmax(0,1fr); }
+}
 </style>
 </head>
 <body>
@@ -169,11 +209,13 @@ function logJson(what, body) {
   jsonEntries = jsonEntries.slice(0, 20);
   jsonLog.textContent = jsonEntries.map(e => JSON.stringify(e, null, 1)).join('\n');
 }
-async function api(method, url) {
-  const res = await fetch(url, {method, headers: method === 'POST' ? {'X-Strata-Panel': '1'} : {}});
+async function api(method, url, payload) {
+  const headers = method === 'POST' ? {'X-Strata-Panel': '1'} : {};
+  if (payload !== undefined) headers['Content-Type'] = 'application/json';
+  const res = await fetch(url, {method, headers, body: payload === undefined ? undefined : JSON.stringify(payload)});
   let body = null;
   try { body = await res.json(); } catch { body = {ok: false, error: `HTTP ${res.status}, 非 JSON 响应`}; }
-  if (!/^\/api\/(?:status|runs)(?:\?|$)/.test(url) || !res.ok || body?.ok === false) logJson(url, body);
+  if (!/^\/api\/(?:status|runs|tuning)(?:\?|$)/.test(url) || !res.ok || body?.ok === false) logJson(url, body);
   if (!res.ok || body?.ok === false) throw new Error(body?.error ?? `HTTP ${res.status}`);
   return body;
 }
@@ -353,8 +395,19 @@ function profileCard(profile) {
   card.appendChild($('div', 'path', profile.profile ?? ''));
   const actions = $('div', 'row');
   const check = $('button', 'ghost', '检查');
+  const tune = $('button', 'ghost', '调参');
   const start = $('button', 'primary', '启动');
   const result = $('div', 'result');
+  tune.onclick = async () => {
+    busy(tune, true, '调参');
+    try {
+      const {openTuning} = await import('./tuning.js');
+      openTuning(profile, api);
+    } catch (error) {
+      result.textContent = '无法打开调参：请重新启动新版网页服务。' + error.message;
+      result.classList.add('err');
+    } finally { busy(tune, false, '调参'); }
+  };
   check.onclick = async () => {
     busy(check, true, '检查'); result.textContent = ''; result.classList.remove('err');
     try {
@@ -374,7 +427,7 @@ function profileCard(profile) {
     } catch (error) { result.textContent = error.message; result.classList.add('err'); }
     busy(start, false, '启动');
   };
-  actions.append(check, start);
+  actions.append(tune, check, start);
   card.append(actions, result);
   return card;
 }

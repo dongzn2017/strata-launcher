@@ -24,6 +24,7 @@ node launcher.mjs lan-plan PROFILE        no listener or run writes
 node launcher.mjs lan PROFILE             foreground bridge, returns separate LAN_ID
 node launcher.mjs lan-status LAN_ID
 node launcher.mjs lan-stop LAN_ID
+node launcher.mjs webpanel [PORT]         local web console, default 8444
 ```
 
 `Strata-Launcher.cmd` forwards the same arguments on Windows. Monitor `--once` emits metrics JSON through the launcher. The standalone downloadable monitor's `--once` is a text snapshot.
@@ -41,7 +42,7 @@ node launcher.mjs lan-stop LAN_ID
 ## Parameters and Storage
 
 - Original model profiles, model assets and installed Strata files are read-only. Generated manifests/state/logs go under `runtime/` and `logs/`.
-- Explicit `set` is the exception: it edits private `conf/launcher.json`, after validation, with an original-config backup and an exclusive edit lock. No live model mutation or automatic restart follows. Never automatically clear an existing config lock.
+- Explicit save in the local web or Windows panel, or CLI `set`, edits private `conf/launcher.json` after validation, with an original-config backup and an exclusive edit lock. Web saves also reject stale configuration revisions. No live model mutation or automatic restart follows. Never automatically clear an existing config lock.
 - Supported mutable sections: `settings`, `sampling`, `engineOptions`, `draftOptions`, `learning`, `limits`. No arbitrary environment/command pass-through. Reference-only entries are not editable controls.
 - `default` inherits model/process/engine behavior; it does not mean off. Preserve defaults unless the user asks for tuning. Risky route/approximation options may alter results, not just throughput.
 - `limits` changes recognized validation ranges, not physical resource guarantees. Do not lower admission/headroom just to force an unsafe start. Explicit PLE RAM mode is guarded against an obviously excessive total budget, not proven safe for every workload.

@@ -6,6 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {read, stateRoot} from '../scripts/strata-panel/core.mjs';
 import {runCommand} from '../launcher.mjs';
+import {httpError, saveTuning, tuningOptions} from './tuning.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -14,6 +15,29 @@ const page = path.join(here, 'index.html');
 const terminalStates = ['stopped', 'exited', 'error'];
 const runId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const profileId = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+async function readJson(request) {
+  if (request.headers['content-type']?.split(';',1)[0].trim().toLowerCase() !== 'application/json') {
+    throw httpError(415, 'Expected application/json');
+  }
+  const limit = 16 * 1024;
+  if (Number(request.headers['content-length']) > limit) {
+    request.resume();
+    throw httpError(413, 'Parameter request is too large');
+  }
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of request.iterator({destroyOnReturn:false})) {
+    size += chunk.length;
+    if (size > limit) {
+      request.resume();
+      throw httpError(413, 'Parameter request is too large');
+    }
+    chunks.push(chunk);
+  }
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  catch { throw httpError(400, 'Invalid parameter JSON'); }
+}
 
 function runCli(args) {
   return new Promise(resolve => {
@@ -107,6 +131,8 @@ const routes = {
   'GET /api/check': async url => runCli(['check', url.searchParams.get('id')]),
   'GET /api/status': url => runCommand('status', url.searchParams.get('id')),
   'GET /api/runs': () => activeRuns(),
+  'GET /api/tuning': url => tuningOptions(url.searchParams.get('id')),
+  'POST /api/tuning': async (url,request) => saveTuning(url.searchParams.get('id'),await readJson(request)),
   'POST /api/start': url => startRun(url.searchParams.get('id')),
   'POST /api/stop': url => runCommand('stop', url.searchParams.get('id')),
 };
@@ -134,16 +160,20 @@ const server = http.createServer(async (request, response) => {
     try { return send(200, fs.readFileSync(page, 'utf8'), 'text/html'); }
     catch { return send(500, 'ui/index.html is missing', 'text/plain'); }
   }
+  if (request.method === 'GET' && url.pathname === '/tuning.js') {
+    try { return send(200, fs.readFileSync(path.join(here,'tuning.js'),'utf8'), 'text/javascript'); }
+    catch { return send(500, 'Parameter editor script is missing', 'text/plain'); }
+  }
   const handler = routes[`${request.method} ${url.pathname}`];
   if (!handler) return send(404, {ok: false, error: 'unknown endpoint'});
-  const ids = {'/api/doctor': profileId, '/api/check': profileId, '/api/start': profileId, '/api/status': runId, '/api/stop': runId};
+  const ids = {'/api/doctor': profileId, '/api/check': profileId, '/api/start': profileId, '/api/status': runId, '/api/stop': runId, '/api/tuning': profileId};
   const id = url.searchParams.get('id');
   if (ids[url.pathname] && (url.pathname !== '/api/doctor' || url.searchParams.has('profile')) &&
       !ids[url.pathname].test((url.pathname === '/api/doctor' ? url.searchParams.get('profile') : id) ?? '')) {
     return send(400, {ok: false, error: 'missing or invalid id'});
   }
-  try { send(200, await handler(url)); }
-  catch (error) { send(500, {ok: false, error: String(error?.message ?? error)}); }
+  try { send(200, await handler(url,request)); }
+  catch (error) { send(error.status ?? 500, {ok: false, error: String(error?.message ?? error)}); }
 });
 
 const port = Number(process.argv[2] ?? 8444);

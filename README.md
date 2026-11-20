@@ -2,15 +2,21 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A portable Windows GUI and JSON-configured CLI for [Strata](https://github.com/Niko1221/Strata). Tune model profiles, inspect VRAM, close selected apps, view terminal telemetry, configure an existing Pi, and share inference/capabilities over a trusted private LAN.
+**[Download the Windows ZIP](https://github.com/dongzn2017/strata-launcher/releases/download/v1.3.0/strata-launcher-v1.3.0-windows.zip)** · [Release notes and SHA-256 checksums](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.0) · [Quick start](#quick-start)
 
-This is an independent launcher, **not Strata Desktop**, an engine distribution, or a model downloader. Version 1.3.0 adds a dependency-free local web console on top of 1.2.0; behaviour of every existing command is unchanged.
+A portable Windows panel, local web console and CLI for an existing [Strata](https://github.com/Niko1221/Strata) installation. This is not Strata Desktop and ships no engines, model weights, private configuration, Pi sessions or credentials.
 
-**New installation?** [Configure your existing Strata setup](#quick-start), then choose the [Windows panel](#windows-panel) for tuning, Pi and resource controls, or the [web console](#web-console) for checks, starting and stopping configured models, and run status.
+**New in 1.3.0:** tune and save profiles in the browser, or use the refreshed native panel. The advanced engine tab now lays out correctly on first selection. Finish [initial setup](#quick-start), then choose an entry point:
 
-## RTX 5070 + 64 GB: My Current Best Setup
+| Entry point | Command | Best for |
+|---|---|---|
+| [Windows panel](#windows-panel) | Double-click `Strata-Panel.cmd` | Tuning, Pi, VRAM inspection and resource controls without a browser |
+| [Web console](#web-console) | `node launcher.mjs webpanel` | Tuning, start/stop and run status in a browser |
+| [CLI](#tune-and-save) | `node launcher.mjs --help` | Scripting, checks and terminal workflows |
 
-**The included IQ4_XS-v31 preset is the best configuration I have tuned so far for my own RTX 5070 12 GB + 64 GB machine and workloads.** It is not a universal optimum.
+## RTX 5070 + 64 GB: Included Preset Snapshot
+
+The included IQ4_XS-v31 snapshot was tuned for the author's own RTX 5070 12 GB + 64 GB machine and workloads. It is not a 1.3.0 default or a universal optimum.
 
 I have observed **100+ tokens/s in some workloads when the VRAM expert cache is doing the work**. Breaking 100 on a single 5070 plus 64 GB feels fast. This is an **author-reported usage observation**, not a reproducible benchmark published with this release, a sustained-speed guarantee, GPU utilization, or draft acceptance percentage. Prompt length, cache hits, drafting acceptance, output type and background GPU usage matter. No new throughput benchmark was run to publish this launcher.
 
@@ -40,7 +46,17 @@ node launcher.mjs webpanel
 2. Review the environment report, select a model profile, run **Check**, then press **Start**. Wait for the run to show ready and report its model API URL. The web port is not the inference API or LAN bridge port.
 3. **You can close the browser** without stopping inference. Leave the `webpanel` terminal running. To shut it down, stop your model in the page first, then press `Ctrl+C` in that terminal.
 
-The console listens on loopback only and does not launch models automatically. For full parameter editing, Pi and resource controls, use the native panel or the relevant CLI commands. Remote inference uses the separate LAN bridge below.
+Click **调参** (Tune) on a model card to change context, KV, RAM and VRAM budgets, CPU, reasoning, sampling, drafting, routing learning and advanced engine options. **保存参数** (Save) validates the changes together, backs up the previous file under `logs/config-backups` and writes the shared `conf/launcher.json`. Changes take effect on the next launch; saving does not restart a running model. Reload the settings if another editor changed the file. Restart the web server after updating the launcher code; refreshing the browser does not update the backend.
+
+The console listens on loopback only and does not launch models automatically. It does not manage Pi, resource optimization, installation paths or LAN forwarding. Remote inference uses the separate LAN bridge below.
+
+| Address | Typical port | Access |
+|---|---|---|
+| Web console | `8444`, configurable on the command line | Launcher machine only |
+| Model API | `settings.port`, e.g. `8080` | Local clients and the local bridge |
+| LAN inference bridge | `lan.port`, e.g. `8081` | Allowed private client IPs, only when explicitly started |
+
+Edit a model in one interface at a time. After saving from the web, resolve unsaved WinForms edits and reopen that panel before editing the same profile there.
 
 ## Windows Panel
 
@@ -59,7 +75,7 @@ Select the model/preset at the top. The model tab groups context, resources, gen
 
 For Pi, copy `conf/pi.example.json` to private `conf/pi.json`, set the installed Pi entry script and optional existing extension/skill paths. Nothing is installed or copied from another user's Pi. The panel verifies actual context, vision and model alias before opening Pi; generation/compaction behavior of your external plugins remains their responsibility. The public adapter uses Pi's CLI/extension API, not the author's private Pi internals; live Pi integration must be tested on your installed version.
 
-## What's New
+## Existing Features
 
 - **Windows GUI, process management and VRAM inspection**, plus the author's current 5070/64GB preset; **42 engine controls / 162 reference entries**, including `auto:8192` prefill.
 - `options` shows allowed choices and effective/inherited values. `set` validates edits, backs up the original config and saves for the **next launch**, without changing a running model.
@@ -77,7 +93,7 @@ No dependencies are installed into your Strata runtime. This release does not ad
 
 ## Quick Start
 
-1. Download and fully extract the ZIP from the [GitHub repository](https://github.com/dongzn2017/strata-launcher), or clone it with Git. Do not download just the `.cmd` file.
+1. Download `strata-launcher-v1.3.0-windows.zip` from the [release page](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.0) and extract it completely. Do not download just the `.cmd` file. Run `Get-FileHash .\strata-launcher-v1.3.0-windows.zip -Algorithm SHA256` to compare with the published `SHA256SUMS.txt`.
 2. Open PowerShell in the launcher folder. Check that `node --version` is 22 or newer. No `npm install` is required. Install Strata and its matching engine and prepare the model separately.
 3. Locate your existing install by replacing these sample folders with your own:
 
@@ -88,6 +104,8 @@ node launcher.mjs detect "C:/Strata" "D:/Models"
 `detect` does not save or launch anything. Put only the returned **`config` object** in `conf/launcher.json`, not the whole report. Alternatively, adapt [conf/launcher.example.json](conf/launcher.example.json). Check the Control/engine pairing and model-profile path; replace the placeholders and `null` values, especially `minimumFreeGiB`.
 
 Paths in launcher config are relative to that config file; asset paths inside the original Strata model profile must be absolute. Keep private `conf/launcher.json` out of Git.
+
+**Upgrading from 1.2.0:** keep the old folder, extract 1.3.0 separately, and reuse your own `conf/launcher.json` and optional `conf/pi.json`. Config format is still `version: 1`; check relative paths before launching. Do not replace files in a folder still hosting an active run. Leave old logs and run state in place.
 
 ```powershell
 node launcher.mjs list

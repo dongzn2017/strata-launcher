@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import http from 'node:http';
+import net from 'node:net';
+import {once} from 'node:events';
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -72,6 +74,75 @@ test('launcher reads local config independently of cwd and check never creates a
   fs.unlinkSync(f.shard);
   assert.match(f.call('check', f.profile.id).stderr, /weights-00002-of-00002\.gguf/);
   assert.equal(fs.existsSync(path.join(f.root, 'runtime')), false);
+});
+
+test('web tuning validates and saves a whole patch without touching source profiles or runs', {timeout: 15000}, async t => {
+  const f = fixture(t);
+  for (const file of ['index.html','server.mjs','tuning.mjs','tuning.js']) {
+    f.write('ui/'+file,fs.readFileSync(path.join(source,'ui',file)));
+  }
+  f.write('conf/launcher.schema.json',fs.readFileSync(path.join(source,'conf/launcher.schema.json')));
+  f.profile.limits = {expertGiB:[8,54]};
+  f.config.profiles.push({...f.profile,id:'other',settings:{port:8181}});
+  f.write('conf/launcher.json',f.config);
+  const original = fs.readFileSync(f.configFile);
+  const originalProfile = fs.readFileSync(f.profileFile);
+  const reserve = net.createServer().listen(0,'127.0.0.1');
+  await once(reserve,'listening');
+  const {port} = reserve.address();
+  await new Promise(resolve=>reserve.close(resolve));
+  const child = spawn(process.execPath,[path.join(f.root,'ui/server.mjs'),String(port)],{windowsHide:true});
+  const exited = once(child,'close');
+  try {
+    await Promise.race([once(child.stdout,'data'),exited.then(()=>{throw new Error('Fixture web server exited');})]);
+    const origin = 'http://127.0.0.1:'+port;
+    const endpoint = origin+'/api/tuning?id='+f.profile.id;
+    const request = (url,opts) => fetch(url,{...opts,signal:AbortSignal.timeout(3000)});
+    const options = async () => {
+      const response = await request(endpoint);
+      assert.equal(response.status,200);
+      return response.json();
+    };
+    const post = (payload,extra = {}) => request(endpoint,{method:'POST',body:JSON.stringify(payload),
+      headers:{'Content-Type':'application/json','X-Strata-Panel':'1',Origin:origin,...extra}});
+    assert.match((await request(origin+'/tuning.js')).headers.get('content-type'),/^text\/javascript/);
+    const before = await options();
+    assert.equal(before.specs.settings.expertGiB.maximum,54);
+    assert.equal(before.values.settings.context,32768);
+    assert.ok(before.engineOptions.some(spec=>spec.key==='tailSkip'));
+    assert.equal((await post({revision:before.revision,changes:{settings:{port:8188}}},{Origin:'http://example.test'})).status,403);
+    assert.equal((await post({revision:before.revision,changes:{settings:{port:8188}}},{'Content-Type':'text/plain'})).status,415);
+    assert.equal((await post({revision:before.revision,changes:{settings:{port:8188}},extra:'x'.repeat(16384)})).status,413);
+    assert.equal((await post({revision:before.revision,changes:{deployment:{engineVersion:'0.0.0'}}})).status,400);
+    assert.equal((await post({revision:before.revision,changes:{settings:{port:8188,kvResident:65536}}})).status,422);
+    assert.equal((await post({revision:before.revision,changes:{sampling:{mode:'model',temperature:99}}})).status,422);
+    assert.deepEqual(fs.readFileSync(f.configFile),original);
+    assert.equal(fs.existsSync(path.join(f.root,'logs')),false);
+    const response = await post({revision:before.revision,changes:{
+      settings:{context:65536,kvResident:49152},sampling:{temperature:0.65},
+      engineOptions:{vramFree:'device'},draftOptions:{confidence:0.7},learning:{enabled:true}}});
+    assert.equal(response.status,200,await response.clone().text());
+    const result = await response.json();
+    assert.equal(result.restartRequired,true);
+    assert.deepEqual(fs.readFileSync(result.backup),original);
+    assert.deepEqual(f.read(f.configFile).profiles[1],f.config.profiles[1]);
+    const after = await options();
+    assert.notEqual(after.revision,before.revision);
+    assert.equal(after.values.settings.kvResident,49152);
+    assert.equal(after.values.sampling.temperature,0.65);
+    assert.equal(after.values.engineOptions.kva,'on');
+    assert.equal(after.values.engineOptions.vramFree,'device');
+    assert.equal(after.values.draftOptions.confidence,0.7);
+    assert.equal(after.values.learning.enabled,true);
+    const snapshot = fs.readFileSync(f.configFile);
+    assert.equal((await post({revision:before.revision,changes:{settings:{port:8189}}})).status,409);
+    fs.writeFileSync(f.configFile+'.lock','existing lock');
+    assert.equal((await post({revision:after.revision,changes:{settings:{port:8189}}})).status,409);
+    assert.equal(fs.readFileSync(f.configFile+'.lock','utf8'),'existing lock');
+    assert.deepEqual(fs.readFileSync(f.configFile),snapshot);
+    assert.deepEqual(fs.readFileSync(f.profileFile),originalProfile);
+    assert.equal(fs.existsSync(path.join(f.root,'runtime')),false);
+  } finally { child.kill(); await exited; }
 });
 
 test('prepare writes an independent run with exact paths, settings, and hashes', t => {
@@ -175,19 +246,26 @@ test('doctor reports the environment and refuses to claim readiness over a broke
   assert.equal(report.problems.find(problem => problem.section === 'python').error.includes('psutil'), true);
   assert.equal(fs.existsSync(path.join(f.root, 'runtime')), false, 'doctor must not create a run');
 
+  // Real engine detection is host state, independent of the deliberately broken fixture.
+  const fixtureProblems = snapshot => {
+    const engineProblems = snapshot.problems.filter(problem => problem.section === 'engines');
+    assert.equal(engineProblems.length, snapshot.engines.names?.length ? 1 : 0);
+    return snapshot.problems.filter(problem => problem.section !== 'engines');
+  };
   fs.rmSync(path.join(f.root, 'install/components/engine/fixture/strata.exe'));
   fs.unlinkSync(f.shard);
   const broken = JSON.parse(f.call('doctor').stdout);
   assert.equal(broken.ok, false);
-  assert.deepEqual(broken.problems.map(problem => problem.section), ['deployment', 'python', 'profiles']);
-  assert.match(broken.problems[0].error, /strata\.exe/);
-  assert.match(broken.problems[2].error, /strata\.exe/);
+  const problems = fixtureProblems(broken);
+  assert.deepEqual(problems.map(problem => problem.section), ['deployment', 'python', 'profiles']);
+  assert.match(problems[0].error, /strata\.exe/);
+  assert.match(problems[2].error, /strata\.exe/);
   assert.equal(broken.deployment.engine.endsWith('strata.exe'), true, 'a failed check must not erase the report');
   assert.equal(broken.profiles.length, 1);
   f.write('install/components/engine/fixture/strata.exe', '');
   const shardless = JSON.parse(f.call('doctor').stdout);
   assert.match(shardless.problems.at(-1).error, /weights-00002-of-00002\.gguf/);
-  assert.deepEqual(shardless.problems.map(problem => problem.section), ['python', 'profiles']);
+  assert.deepEqual(fixtureProblems(shardless).map(problem => problem.section), ['python', 'profiles']);
 
   assert.match(f.call('doctor', 'nope').stderr, /Unknown profile: nope/);
 });

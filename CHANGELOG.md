@@ -1,17 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.3.0
 
+- Added a dependency-free loopback web console: `node launcher.mjs webpanel [PORT]` (default 8444). Check configured profiles, start and stop launcher-owned runs, and see run status without enabling LAN forwarding.
+- Tune each configured model in the browser, using the same launch validation and config lock as the CLI. Changes are validated together, backed up and saved for the next launch only; stale browser edits are rejected.
 - Refreshed the native WinForms model and status areas. The advanced engine page now lays out its controls on first selection and after resizing, without a manual resize to reveal them.
 - Improved web-console startup and error reporting. It remains loopback-only; a start receipt is distinct from model readiness.
 - Added bilingual setup instructions for both launchers and documented the web console/model API/LAN port distinction. Extended option validation accepts engine 0.1.62; the reference baseline is still 0.1.60.
-- Verified offline with 45 Node tests, 22 Python runner tests and the generated schema check. Native layout exercised at the host's 96 DPI and simulated scale changes. No new inference benchmark.
-
-## 1.3.0
-
-- Added `node launcher.mjs webpanel [PORT]`: a dependency-free loopback web console (default 8444) bridging the same CLI — doctor, profiles, check, start, stop, live runs. Dark animated single-page UI; no new capabilities, no external requests, nothing starts by itself.
-- The WinForms `npm run panel`, `Strata-Panel.cmd` and every existing CLI command are unchanged.
-- Validation: 44 offline Node tests plus web console checked in a real browser (render, doctor/list/check round-trips with a live config); Python suite unchanged.
+- Config format stays at `version: 1`. Neither panel starts a model or a LAN bridge automatically.
+- Verified with 46 offline Node tests, 22 Python runner tests and the generated schema check. Native layout checked at 96 DPI and with simulated scaling; the browser editor checked on desktop and narrow screens. No new inference benchmark.
 
 ## 1.2.0
 

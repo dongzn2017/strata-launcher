@@ -2,15 +2,21 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-用 Windows 图形面板或 JSON / CLI 管理 [Strata](https://github.com/Niko1221/Strata)：启动、停止、调参、查显存、关闭所选进程、终端监控，以及可选的 Pi 和局域网推理转发。
+**[下载 Windows ZIP](https://github.com/dongzn2017/strata-launcher/releases/download/v1.3.0/strata-launcher-v1.3.0-windows.zip)** · [发布说明与 SHA-256 校验](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.0) · [快速开始](#快速开始)
 
-这是独立启动器，不是 Strata Desktop，也不是引擎/模型下载器。1.3.0 在 1.2.0 基础上新增零依赖本地网页控制台；所有既有命令行为不变。1.2.0 已将作者日常使用的 WinForms 界面做成便携适配；不附带私人路径、会话、插件、watchdog 状态、凭据或模型权重。
+用 Windows 图形面板、网页或 CLI 启动和调节已有的 [Strata](https://github.com/Niko1221/Strata)。这是独立便携工具，不是 Strata Desktop；不附带引擎、模型权重、私人配置、Pi 会话或凭据。
 
-**第一次部署？** 从[快速开始](#快速开始)配置已有 Strata，然后选一个入口：[原生 Windows 面板](#windows-图形启动器)负责完整调参、Pi 和资源管理，不需要浏览器；[网页控制台](#网页控制台)用于检查环境、启动/停止已配置模型和看状态。
+**1.3.0 新版**：网页能调参、保存和监控；原生面板重新分区，高级引擎页第一次打开就能正确布局。先完成[首次配置](#快速开始)，再用以下任一入口：
 
-## 单卡 5070 + 64GB：我的现阶段最佳自用配置
+| 入口 | 启动方式 | 适用场景 |
+|---|---|---|
+| [原生 Windows 面板](#windows-图形启动器) | 双击 `Strata-Panel.cmd` | 调参、Pi、显存检查和资源管理，无需浏览器 |
+| [网页控制台](#网页控制台) | `node launcher.mjs webpanel` | 在浏览器调参、启停、看运行状态 |
+| [命令行](#调参并保存) | `node launcher.mjs --help` | 脚本、配置检查和终端操作 |
 
-**这就是我现阶段在 RTX 5070 12GB + 64GB RAM 上调出来、最适合自己工作流的一套配置。** 不是所有机器、所有场景的全局最优。
+## 单卡 5070 + 64GB：发布附带的自用配置快照
+
+下方是作者在 RTX 5070 12GB + 64GB RAM 上调出的自用配置快照，**不是 1.3.0 的强制默认值，也不是所有机器的最优设置**。
 
 显存专家工作时，我观察到过 **100+ token/s**。单卡 5070 加 64GB 能破百，还是相当快的。这里是**作者使用体验**，不是本次发布重新跑出的可复现 benchmark，不保证全程/所有上下文破百，也不是 GPU 利用率或草稿接受率。速度取决于任务、专家缓存、草稿接受情况、上下文和后台占用。
 
@@ -36,7 +42,17 @@ node launcher.mjs webpanel
 2. 查看**环境**，在**模型配置**选档，先点**检查**，再点**启动**。等**运行状态**显示就绪并给出模型 API 地址。网页端口不是模型 API 端口，也不是 LAN 转发端口。
 3. **Chrome 可以关**：只关网页或整个浏览器不会停止推理，保留运行 `webpanel` 的终端即可。要结束网页模式，先在页面停止本轮模型，再到 Web 服务终端按 `Ctrl+C`。
 
-网页只监听本机，不会自动加载模型，也不会替你编辑完整参数、打开 Pi 或启用 LAN 转发。调参用原生面板或 CLI，远程推理用下方独立的 LAN 转发。
+在模型卡片点**调参**，可以改上下文、KV、RAM/显存、CPU、思考与采样、草稿器、路由学习和高级引擎选项。**保存参数**整批校验并备份到 `logs/config-backups`，写入与原生面板、CLI 共用的 `conf/launcher.json`。只影响下一次启动，不会停止或重启正在运行的模型。若别的窗口改了配置，请先**重新读取**。升级启动器代码后，需重开网页服务，单靠刷新浏览器不会更新后端。
+
+网页只监听本机，不会自动加载模型，也不提供 Pi、资源优化、安装路径修改或 LAN 管理。远程推理用下方独立的 LAN 转发。
+
+| 地址用途 | 常见端口 | 谁可以访问 |
+|---|---|---|
+| 网页控制台 | `8444`，可在命令末尾指定其他端口 | 仅运行启动器的本机 |
+| 模型 API | `settings.port`，例如 `8080` | 本机应用或本机转发进程 |
+| LAN 推理转发 | `lan.port`，例如 `8081` | 手动启用后，指定的私有客户端 IP |
+
+同一个模型档建议只在一处编辑；网页保存后，已打开的原生窗口要先处理未保存修改，再重新打开读取新值。
 
 ## Windows 图形启动器
 
@@ -55,7 +71,7 @@ node launcher.mjs webpanel
 
 Pi 为可选项：将 `conf/pi.example.json` 复制为私有 `conf/pi.json`，填写自己安装的 Pi 入口和已有扩展/技能路径。按实际模型、上下文、视觉和 alias 校验后启动；不安装插件、不复制作者私有 Pi 内部代码，不迁移会话或重置 watchdog 预算。外部扩展的监视、压缩和技能行为仍由其自身负责；请在自己 Pi 版本上做真实联调。
 
-## 1.2.0 内容
+## 保留的功能
 
 - **图形启动器、显存扫描、进程管理、自用配置快照**；42 项可调引擎控制和 162 项参考索引，新增 `auto:8192` 分块选择。
 - `options` 查看选项、范围和继承值；`set` 校验、备份并保存到配置，**下次启动生效**，不修改正在运行的模型。
@@ -73,7 +89,7 @@ Pi 为可选项：将 `conf/pi.example.json` 复制为私有 `conf/pi.json`，�
 
 ## 快速开始
 
-1. 从 [GitHub 仓库](https://github.com/dongzn2017/strata-launcher)下载 ZIP 后完整解压，或用 Git 克隆。不要只下载一个 `.cmd`。
+1. 从 [Release 页面](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.0) 下载 `strata-launcher-v1.3.0-windows.zip` 并完整解压。不要只下载一个 `.cmd`。可用 `Get-FileHash .\strata-launcher-v1.3.0-windows.zip -Algorithm SHA256` 与该页的 `SHA256SUMS.txt` 比对。
 2. 在解压后的启动器目录打开 PowerShell，确认 `node --version` 为 22 或以上。本启动器无需 `npm install`；Strata、匹配的引擎和已准备好的模型需事先安装。
 3. 用下面的命令检查已有安装，把示例目录替换为自己的 Strata 和模型目录：
 
@@ -84,6 +100,8 @@ node launcher.mjs detect "C:/Strata" "D:/Models"
 `detect` 只输出候选，不会保存或启动。只取输出里的 **`config` 对象**作为 `conf/launcher.json` 的内容，不要整份输出写入。也可以复制 [示例配置](conf/launcher.example.json) 来编辑。核对 Control/引擎配对、模型档路径，替换占位值，尤其是启动前空闲 RAM 门槛 `minimumFreeGiB`。
 
 启动器配置内的相对路径按配置文件目录解析；原 Strata 模型档中的资产路径要求绝对路径。私人 `conf/launcher.json` 不要提交到 Git。
+
+**从 1.2.0 升级：**先保留原目录，把新版解压到新目录，再复用自己的 `conf/launcher.json`（用 Pi 则也复用 `conf/pi.json`）。配置格式仍是 `version: 1`；核对指向旧目录的相对路径。不要覆盖仍在托管运行任务的旧程序，旧日志和运行清单留在原处。
 
 ```powershell
 node launcher.mjs list
