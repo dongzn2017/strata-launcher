@@ -8,7 +8,7 @@ Run `node launcher.mjs options PROFILE` for the exact allowed choices and effect
 
 `set PROFILE section.field VALUE` accepts a bare enum string or JSON scalar/array, validates the selected profile before writing, and returns the original-config backup path. It does not change a running model. Existing config locks are not automatically cleared. The original installed model profile is never rewritten.
 
-`engineOptions` defaults to `default`: inherit profile/process/engine behavior, **not force off**. Extended controls target declared engines 0.1.59/0.1.60. The reference index has 162 entries (0.1.60 baseline); entries outside curated controls are reference-only, not arbitrary flag/environment passthrough. Compatibility and performance still need real-workload validation.
+`engineOptions` defaults to `default`: inherit profile/process/engine behavior, **not force off**. Extended controls target declared engines 0.1.59, 0.1.60 and 0.1.62. The reference index has 162 entries (0.1.60 baseline); entries outside curated controls are reference-only, not arbitrary flag/environment passthrough. Compatibility and performance still need real-workload validation.
 
 ## Core Settings
 

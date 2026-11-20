@@ -6,6 +6,8 @@
 
 这是独立启动器，不是 Strata Desktop，也不是引擎/模型下载器。1.3.0 在 1.2.0 基础上新增零依赖本地网页控制台；所有既有命令行为不变。1.2.0 已将作者日常使用的 WinForms 界面做成便携适配；不附带私人路径、会话、插件、watchdog 状态、凭据或模型权重。
 
+**第一次部署？** 从[快速开始](#快速开始)配置已有 Strata，然后选一个入口：[原生 Windows 面板](#windows-图形启动器)负责完整调参、Pi 和资源管理，不需要浏览器；[网页控制台](#网页控制台)用于检查环境、启动/停止已配置模型和看状态。
+
 ## 单卡 5070 + 64GB：我的现阶段最佳自用配置
 
 **这就是我现阶段在 RTX 5070 12GB + 64GB RAM 上调出来、最适合自己工作流的一套配置。** 不是所有机器、所有场景的全局最优。
@@ -24,11 +26,23 @@
 
 ## 网页控制台
 
-先配置私有 `conf/launcher.json`，再执行 `node launcher.mjs webpanel`（可加端口，默认 8444），浏览器打开 `http://127.0.0.1:8444/`。零依赖本地服务桥接同一套 CLI：环境诊断、模型配置、检查、启动、停止、运行状态。只监听回环地址，不会自行启动任何东西。
+配置好私有 `conf/launcher.json` 后，在启动器目录打开 PowerShell：
+
+```powershell
+node launcher.mjs webpanel
+```
+
+1. 打开终端打印的地址，默认是 [http://127.0.0.1:8444/](http://127.0.0.1:8444/)。请用 `127.0.0.1`，不要换成 `localhost` 或局域网 IP。8444 被占用时，执行 `node launcher.mjs webpanel 8445` 并打开新地址。
+2. 查看**环境**，在**模型配置**选档，先点**检查**，再点**启动**。等**运行状态**显示就绪并给出模型 API 地址。网页端口不是模型 API 端口，也不是 LAN 转发端口。
+3. **Chrome 可以关**：只关网页或整个浏览器不会停止推理，保留运行 `webpanel` 的终端即可。要结束网页模式，先在页面停止本轮模型，再到 Web 服务终端按 `Ctrl+C`。
+
+网页只监听本机，不会自动加载模型，也不会替你编辑完整参数、打开 Pi 或启用 LAN 转发。调参用原生面板或 CLI，远程推理用下方独立的 LAN 转发。
 
 ## Windows 图形启动器
 
-先按下方方法配置私有 `conf/launcher.json`，安装 Git for Windows、Node.js 22+ 后打开 **`Strata-Panel.cmd`**，或执行 `npm run panel`。原 CLI 保留。
+配置好私有 `conf/launcher.json`，安装 Git for Windows、Node.js 22+ 后，双击 **`Strata-Panel.cmd`**，或在仓库目录执行 `npm run panel`。运行的是 Windows PowerShell/WinForms，不会启动 Chrome、WebView 或网页服务。
+
+顶部选**模型 / 预设**；模型页按上下文、资源、生成和视觉分区。**高级引擎**可筛选参数、预览下次启动覆盖值、查阅只读索引。底部**保存面板选择**保存本次设置，**启动模型**才会加载模型，**刷新服务**只重新读取状态。
 
 ![资源优化页](docs/images/resources.png)
 
@@ -53,24 +67,33 @@ Pi 为可选项：将 `conf/pi.example.json` 复制为私有 `conf/pi.json`，�
 
 - 模型主机：Windows、Node.js **22+**、已有的 Strata Control 和匹配引擎；Control 的 `python/python.exe` 能导入 `psutil`。
 - 已有且兼容的 Strata 模型档 JSON，包含 `args`、pack、native 权重、专家路由表、tokenizer，以及可选的视觉头。
-- 高级控制适配 **引擎/Control 0.1.59、0.1.60**，分别对应 Terminal **0.2.13、0.2.14**。两者版本号不同；其他版本使用显式高级覆盖前仍需审核，保持继承可继续使用。
+- 高级控制适配 **引擎 0.1.59、0.1.60、0.1.62**。引擎与 Terminal 版本号不可互换。Strata 升级后，运行 `doctor` 检查私有配置是否还指向已被清理的旧组件。
 
 本仓库不往 Strata 运行时里自动安装依赖，不新增 DeepSeek 专用后端、Basalt 后端或任意 GGUF 通用加载器。不能只凭模型名字就认为兼容。
 
 ## 快速开始
 
+1. 从 [GitHub 仓库](https://github.com/dongzn2017/strata-launcher)下载 ZIP 后完整解压，或用 Git 克隆。不要只下载一个 `.cmd`。
+2. 在解压后的启动器目录打开 PowerShell，确认 `node --version` 为 22 或以上。本启动器无需 `npm install`；Strata、匹配的引擎和已准备好的模型需事先安装。
+3. 用下面的命令检查已有安装，把示例目录替换为自己的 Strata 和模型目录：
+
 ```powershell
-.\Strata-Launcher.cmd doctor
-.\Strata-Launcher.cmd detect C:/Strata D:/Models
+node launcher.mjs detect "C:/Strata" "D:/Models"
 ```
 
-`detect` 只输出候选 `config`，不会保存或启动。核对 Control/引擎配对和模型路径后，放入 `conf/launcher.json`；也可以修改 [示例配置](conf/launcher.example.json)。替换所有占位路径和 `null`，尤其是启动前空闲 RAM 门槛 `minimumFreeGiB`。
+`detect` 只输出候选，不会保存或启动。只取输出里的 **`config` 对象**作为 `conf/launcher.json` 的内容，不要整份输出写入。也可以复制 [示例配置](conf/launcher.example.json) 来编辑。核对 Control/引擎配对、模型档路径，替换占位值，尤其是启动前空闲 RAM 门槛 `minimumFreeGiB`。
 
 启动器配置内的相对路径按配置文件目录解析；原 Strata 模型档中的资产路径要求绝对路径。私人 `conf/launcher.json` 不要提交到 Git。
 
 ```powershell
+node launcher.mjs list
 node launcher.mjs doctor my-model
 node launcher.mjs check my-model
+```
+
+用 `list` 输出中的实际 ID 替换 `my-model`。检查失败先看 `doctor` 报告：常见原因是未创建私有配置、升级后仍指向旧引擎、模型资产缺失、端口占用或可用内存不足。不要为了通过检查去清锁或者忽略内存门槛。通过后选择上方 GUI，也可以继续用 CLI：
+
+```powershell
 node launcher.mjs prepare my-model
 node launcher.mjs start my-model
 ```
@@ -176,9 +199,12 @@ node strata-monitor.mjs --url http://192.168.1.10:8081
 npm run schema:check
 npm test
 npm run test:python
+npm run panel -- -AdvancedSelfTest
 ```
 
 Python runner 测试需要独立测试解释器能导入 `psutil`（可安装 `python -m pip install psutil==7.2.2`），不要为测试改动别人的 Strata 运行时。测试只用临时文件、模拟资产/进程和有界的 **loopback 模拟 HTTP**，无需 GPU、权重、外部 API 或下载模型。
+
+高级页界面自测需要 Windows 交互桌面和一个已配置档。它会打开测试窗口、生成截图，验证首切高级页及模拟缩放后的子页布局，不启动推理、不保存用户设置。
 
 1.2.0 本机 Windows 已通过 Node/Python 离线测试、schema 检查，以及 100/125/150/200% GUI 资源页检查和真实只读显存扫描。此前本地修复已实际结束一个明确的微信输入法更新器 PID；发布自测不实际清理应用或停桌面，Explorer 结束用模拟测试覆盖。没有为此版本重跑吞吐基准、真实公开版 Pi 会话或跨机防火墙联调，不据此保证模型质量和破百速度。
 

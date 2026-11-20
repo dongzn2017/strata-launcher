@@ -1,5 +1,9 @@
 {
-  "title": "Strata Launcher 1.2.0 · 参数与 Pi 配置",
+  "title": "Strata Launcher · 参数与 Pi 配置",
+  "modelContextGroup": "上下文与连接",
+  "modelResourceGroup": "显存与内存",
+  "modelGenerationGroup": "生成与思考",
+  "modelVisionGroup": "MTP 与视觉",
   "resourcePage": "资源优化",
   "resourceAuto": "启动模型前自动执行",
   "resourceVisual": "降低视觉效果：关闭窗口与菜单动画",

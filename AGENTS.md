@@ -32,7 +32,7 @@ node launcher.mjs lan-stop LAN_ID
 
 1. Run `doctor`; missing private config is expected initially. Ask which folders contain the existing Strata install/models if unknown; do not scan entire unrelated disks.
 2. Run bounded `detect PATH...`, inspect `candidateInstalls`, `unreadable`, `models_detail` and candidate `config`. Do not treat ambiguous pairing as established. Review paths and fill all nulls before writing `conf/launcher.json`.
-3. `deployment.engineVersion` is the **component** version, not the Terminal release. Advanced overrides target 0.1.59/0.1.60; other versions need review.
+3. `deployment.engineVersion` is the **component** version, not the Terminal release. Advanced overrides target 0.1.59/0.1.60/0.1.62; other versions need review.
 4. Run `doctor PROFILE` and `check PROFILE`. Report exact blockers. Missing psutil/assets means an incomplete or wrong installation: do not install into a vendor runtime or fetch models without authorization. Busy ports, another engine or active run are not permission to stop anything.
 5. Inspect `options PROFILE` and `prepare PROFILE`. Only run `start` when authorized. Record absolute run/log paths and the returned UUID.
 6. `status` is a saved snapshot. Confirm live health/model before claiming readiness; a loaded model is not proof of successful generation or tool calling. Leave real inference testing to a separately authorized bounded workload.

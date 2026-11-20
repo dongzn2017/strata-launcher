@@ -6,6 +6,8 @@ A portable Windows GUI and JSON-configured CLI for [Strata](https://github.com/N
 
 This is an independent launcher, **not Strata Desktop**, an engine distribution, or a model downloader. Version 1.3.0 adds a dependency-free local web console on top of 1.2.0; behaviour of every existing command is unchanged.
 
+**New installation?** [Configure your existing Strata setup](#quick-start), then choose the [Windows panel](#windows-panel) for tuning, Pi and resource controls, or the [web console](#web-console) for checks, starting and stopping configured models, and run status.
+
 ## RTX 5070 + 64 GB: My Current Best Setup
 
 **The included IQ4_XS-v31 preset is the best configuration I have tuned so far for my own RTX 5070 12 GB + 64 GB machine and workloads.** It is not a universal optimum.
@@ -28,11 +30,23 @@ I have observed **100+ tokens/s in some workloads when the VRAM expert cache is 
 
 ## Web Console
 
-Configure `conf/launcher.json` first, then run `node launcher.mjs webpanel` (or add a port, default 8444) and open `http://127.0.0.1:8444/`. A zero-dependency local server bridges the same CLI commands: doctor, profiles, check, start, stop, live status. Loopback only; it starts nothing on its own.
+After configuring private `conf/launcher.json`, open PowerShell in the launcher folder:
+
+```powershell
+node launcher.mjs webpanel
+```
+
+1. Open the printed URL (default: [http://127.0.0.1:8444/](http://127.0.0.1:8444/)). Use the exact `127.0.0.1` address, not `localhost` or a LAN IP. If 8444 is taken, run `node launcher.mjs webpanel 8445` and use that URL instead.
+2. Review the environment report, select a model profile, run **Check**, then press **Start**. Wait for the run to show ready and report its model API URL. The web port is not the inference API or LAN bridge port.
+3. **You can close the browser** without stopping inference. Leave the `webpanel` terminal running. To shut it down, stop your model in the page first, then press `Ctrl+C` in that terminal.
+
+The console listens on loopback only and does not launch models automatically. For full parameter editing, Pi and resource controls, use the native panel or the relevant CLI commands. Remote inference uses the separate LAN bridge below.
 
 ## Windows Panel
 
-First configure `conf/launcher.json` as below. Install Git for Windows and Node.js 22+ separately, then double-click **`Strata-Panel.cmd`** or run `npm run panel`. The CLI remains available and unchanged in purpose.
+Configure `conf/launcher.json` as below. With Git for Windows and Node.js 22+ installed, double-click **`Strata-Panel.cmd`** or run `npm run panel` from the launcher folder. This is Windows PowerShell/WinForms; it does not start a browser, WebView, or web server.
+
+Select the model/preset at the top. The model tab groups context, resources, generation and vision. The advanced engine tab includes a filter, a next-launch preview and a read-only reference. Save the panel to persist settings and click Start to load the model; Refresh only reads service status.
 
 ![Resource controls](docs/images/resources.png)
 
@@ -57,24 +71,33 @@ For Pi, copy `conf/pi.example.json` to private `conf/pi.json`, set the installed
 
 - Model host: Windows, Node.js **22+**, an existing Strata Control installation with `python/python.exe` and `psutil`, and a matching engine installation.
 - An existing compatible Strata model profile JSON containing its `args` array, pack, native weights, expert routing table, tokenizer, and optional vision head.
-- Extended controls target **engine/Control 0.1.59 and 0.1.60** (Terminal **0.2.13 and 0.2.14**). These version numbers are **not interchangeable**. Other engines require review before explicit advanced overrides; inherited defaults remain available.
+- Extended controls target engine **0.1.59, 0.1.60 and 0.1.62**. Engine and Terminal versions are **not interchangeable**. After a Strata update, check that the private config still points to an installed Control/engine pair; run `doctor` to diagnose stale paths.
 
 No dependencies are installed into your Strata runtime. This release does not add a DeepSeek-specific, Basalt, or arbitrary GGUF backend. A model name alone is not proof of compatibility.
 
 ## Quick Start
 
+1. Download and fully extract the ZIP from the [GitHub repository](https://github.com/dongzn2017/strata-launcher), or clone it with Git. Do not download just the `.cmd` file.
+2. Open PowerShell in the launcher folder. Check that `node --version` is 22 or newer. No `npm install` is required. Install Strata and its matching engine and prepare the model separately.
+3. Locate your existing install by replacing these sample folders with your own:
+
 ```powershell
-.\Strata-Launcher.cmd doctor
-.\Strata-Launcher.cmd detect C:/Strata D:/Models
+node launcher.mjs detect "C:/Strata" "D:/Models"
 ```
 
-`detect` prints a candidate `config`; it does not save or launch it. Review the detected Control/engine pairing and model paths, then put the config in `conf/launcher.json`. Alternatively, adapt [conf/launcher.example.json](conf/launcher.example.json). Replace all placeholders and `null` values, especially `minimumFreeGiB`.
+`detect` does not save or launch anything. Put only the returned **`config` object** in `conf/launcher.json`, not the whole report. Alternatively, adapt [conf/launcher.example.json](conf/launcher.example.json). Check the Control/engine pairing and model-profile path; replace the placeholders and `null` values, especially `minimumFreeGiB`.
 
 Paths in launcher config are relative to that config file; asset paths inside the original Strata model profile must be absolute. Keep private `conf/launcher.json` out of Git.
 
 ```powershell
+node launcher.mjs list
 node launcher.mjs doctor my-model
 node launcher.mjs check my-model
+```
+
+Replace `my-model` with an actual ID from `list`. For a failed check, look for a missing private config, stale engine paths, missing model assets, a busy port or insufficient free RAM in the diagnosis. Do not clear locks or bypass memory safeguards to force startup. When the checks pass, choose a GUI above, or use the CLI:
+
+```powershell
 node launcher.mjs prepare my-model
 node launcher.mjs start my-model
 ```

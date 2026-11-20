@@ -25,11 +25,6 @@ body::before {
     linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
   background-size: auto, auto, auto, 40px 40px, 40px 40px;
 }
-body::after {
-  content: ""; position: fixed; inset: -30%; z-index: -2; pointer-events: none;
-  background: radial-gradient(28rem 22rem at 30% 40%, rgba(34,211,238,.07), transparent 60%),
-              radial-gradient(30rem 24rem at 70% 60%, rgba(139,92,246,.08), transparent 60%);
-}
 .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 64px; }
 
 header { display: flex; align-items: center; justify-content: space-between;
@@ -123,12 +118,8 @@ details.json pre { background: #070a12; border: 1px solid var(--line); border-ra
   padding: 16px; overflow: auto; max-height: 420px;
   font: 12px/1.7 ui-monospace, Consolas, monospace; color: #9fb0c8; }
 
-@media (prefers-reduced-motion: no-preference) {
-  .lamp.ready .dot, .badge.ready { animation: breathe 2.2s ease-in-out infinite; }
-  .lamp.loading .dot, .badge.loading { animation: breathe 1.1s ease-in-out infinite; }
-  @keyframes breathe { 50% { opacity: .35; box-shadow: 0 0 0 4px rgba(255,255,255,.04); } }
-  body::after { animation: drift 26s ease-in-out infinite alternate; }
-  @keyframes drift { to { transform: translate3d(4%, -3%, 0) scale(1.08); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
 }
 @media (max-width: 640px) { .grid, .rungrid, .envgrid { grid-template-columns: 1fr; } }
 </style>
@@ -179,10 +170,10 @@ function logJson(what, body) {
   jsonLog.textContent = jsonEntries.map(e => JSON.stringify(e, null, 1)).join('\n');
 }
 async function api(method, url) {
-  const res = await fetch(url, {method});
+  const res = await fetch(url, {method, headers: method === 'POST' ? {'X-Strata-Panel': '1'} : {}});
   let body = null;
   try { body = await res.json(); } catch { body = {ok: false, error: `HTTP ${res.status}, 非 JSON 响应`}; }
-  logJson(url, body);
+  if (!/^\/api\/(?:status|runs)(?:\?|$)/.test(url) || !res.ok || body?.ok === false) logJson(url, body);
   if (!res.ok || body?.ok === false) throw new Error(body?.error ?? `HTTP ${res.status}`);
   return body;
 }
@@ -192,7 +183,7 @@ function busy(button, on, label) {
 }
 
 /* 顶栏状态灯 */
-let lampState = null;
+let lampState;
 function setLamp(state) {
   if (state === lampState) return;
   lampState = state;
@@ -231,8 +222,8 @@ async function loadDoctor() {
     ['Node', env.node ?? '?'],
     ['平台', env.platform ?? '?'],
     ['配置文件', report.config?.exists ? '已配置' : '未配置（见 README）'],
-    ['引擎目录', report.deployment?.engine ? (report.deployment.engineExists === false ? '缺失' : '已找到') : '未配置'],
-    ['psutil', report.python?.psutil === true ? '可用' : (report.python ? '不可用' : '未探测')],
+    ['引擎目录', report.deployment?.engine ? (report.problems?.some(p => p.section === 'deployment') ? '组件缺失' : '已找到') : '未配置'],
+    ['psutil', report.python?.psutil ? String(report.python.psutil) : (report.python ? '不可用' : '未探测')],
     ['运行中的引擎', (report.engines?.names ?? []).join(', ') || '无'],
   ];
   for (const [k, v] of facts) {
@@ -246,24 +237,31 @@ async function loadDoctor() {
 
 /* 运行状态 */
 const runTimers = new Map();
+const terminal = new Set(['stopped', 'exited', 'error']);
 async function loadRuns() {
-  let runs = [];
+  let runs;
   try { runs = await api('GET', '/api/runs'); } catch { return; }
-  if (!Array.isArray(runs)) runs = [];
+  for (const run of runs) watchRun(run);
+  updateLamp();
+}
+function watchRun(run) {
+  if (document.getElementById('run-' + run.id)) return;
   const box = document.getElementById('runs');
-  box.textContent = '';
-  setLamp(runs.length ? (runs.some(r => r.state === 'error') ? 'error'
-    : runs.some(r => r.state === 'loading') ? 'loading' : 'ready') : null);
-  const live = new Set(runs.map(r => r.id));
-  for (const [id, timer] of runTimers) if (!live.has(id)) { clearInterval(timer); runTimers.delete(id); }
-  if (!runs.length) { box.appendChild($('div', 'card empty', '还没有运行中的引擎。')); return; }
-  const grid = $('div', 'rungrid');
-  for (const run of runs) { grid.appendChild(runCard(run)); if (!runTimers.has(run.id)) pollRun(run.id); }
-  box.appendChild(grid);
+  box.querySelector('.empty')?.remove();
+  let grid = box.querySelector('.rungrid');
+  if (!grid) { grid = $('div', 'rungrid'); box.appendChild(grid); }
+  grid.appendChild(runCard(run));
+  pollRun(run.id);
+}
+function updateLamp() {
+  const states = [...document.querySelectorAll('#runs .rcard')].map(card => card.dataset.state);
+  setLamp(states.some(state => !terminal.has(state) && state !== 'loading') ? 'ready'
+    : states.includes('loading') ? 'loading' : states.includes('error') ? 'error' : null);
 }
 function runCard(run) {
   const card = $('div', 'card rcard');
   card.id = 'run-' + run.id;
+  card.dataset.state = run.state ?? 'loading';
   card.appendChild($('div', 'small', 'RUN ' + run.id));
   const top = $('div', 'top');
   const badge = $('span', 'badge ' + (run.state ?? ''), run.state ?? 'loading');
@@ -289,14 +287,20 @@ function showError(card, message) {
   r.textContent = message;
 }
 async function pollRun(id) {
+  let polling = false;
   const tick = async () => {
     const card = document.getElementById('run-' + id);
     if (!card) { clearInterval(runTimers.get(id)); runTimers.delete(id); return; }
+    if (polling || document.hidden) return;
+    polling = true;
     let snap;
     try { snap = await api('GET', '/api/status?id=' + encodeURIComponent(id)); }
-    catch { return; }
+    catch (error) { showError(card, error.message); return; }
+    finally { polling = false; }
     const status = snap.status;
     const state = status?.state ?? 'loading';
+    card.dataset.state = state;
+    updateLamp();
     const badge = card.querySelector('.badge');
     badge.className = 'badge ' + state; badge.textContent = state;
     card.querySelector('.m').textContent =
@@ -321,13 +325,13 @@ async function pollRun(id) {
         metrics.appendChild(m);
       }
     }
-    if (['stopped', 'exited', 'error'].includes(state)) {
+    if (terminal.has(state)) {
+      card.querySelector('button.danger').disabled = true;
       clearInterval(runTimers.get(id)); runTimers.delete(id);
-      loadRuns();
     }
   };
-  tick();
   runTimers.set(id, setInterval(tick, 2000));
+  tick();
 }
 
 /* 模型配置 */
@@ -364,8 +368,9 @@ function profileCard(profile) {
     busy(start, true, '启动'); result.textContent = ''; result.classList.remove('err');
     try {
       const r = await api('POST', '/api/start?id=' + encodeURIComponent(profile.id));
-      result.textContent = '已启动：' + (r.id ?? '');
-      loadRuns();
+      result.textContent = '请求已提交：' + r.id;
+      watchRun({id: r.id, model: r.model, state: 'loading'});
+      updateLamp();
     } catch (error) { result.textContent = error.message; result.classList.add('err'); }
     busy(start, false, '启动');
   };
@@ -374,8 +379,10 @@ function profileCard(profile) {
   return card;
 }
 
-loadDoctor(); loadRuns(); loadProfiles();
-setInterval(() => { if (runTimers.size) loadRuns(); }, 10000);
+loadDoctor().catch(error => showError(document.getElementById('doctor'), error.message));
+loadRuns();
+loadProfiles();
+setInterval(() => { if (!document.hidden) loadRuns(); }, 10000);
 </script>
 </body>
 </html>

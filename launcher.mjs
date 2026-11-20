@@ -82,7 +82,7 @@ export function loadConfig(provided) {
   return {deployment, profiles, lan:lanOptions(config.lan)};
 }
 
-function runCommand(command, id) {
+export function runCommand(command, id) {
   if (!runId.test(id)) throw new Error('Expected the RUN_ID printed by start or prepare');
   const directory = path.join(stateRoot, 'runs', id);
   const run = read(path.join(directory, 'run.json'));
@@ -257,11 +257,24 @@ async function main([command, id, ...extra]) {
   const env = {...process.env, PYTHONUTF8: '1', PYTHONNOUSERSITE: '1'};
   delete env.PYTHONHOME;
   delete env.PYTHONPATH;
-  const child = spawn(run.python, ['-u', path.join(root, 'scripts/strata-panel/runner.py'), '--run',
-    path.join(run.dir, 'run.json'), '--parent', String(process.pid)], {cwd: root, env, stdio: 'inherit', windowsHide: true});
   console.log(JSON.stringify(result, null, 2));
-  const [code] = await once(child, 'exit');
-  process.exitCode = code ?? 1;
+  try {
+    const child = spawn(run.python, ['-u', path.join(root, 'scripts/strata-panel/runner.py'), '--run',
+      path.join(run.dir, 'run.json'), '--parent', String(process.pid)], {cwd: root, env, stdio: 'inherit', windowsHide: true});
+    const [code] = await once(child, 'exit');
+    process.exitCode = code ?? 1;
+    if (!terminalStates.includes(readStatus(run)?.state)) {
+      write(path.join(run.dir, 'status.json'), {runId: run.id, state: 'exited', exitCode: process.exitCode});
+    }
+  } catch (error) {
+    write(path.join(run.dir, 'status.json'), {runId: run.id, state: 'error', error: error.message});
+    throw error;
+  }
+}
+
+function readStatus(run) {
+  const file = path.join(run.dir, 'status.json');
+  return fs.existsSync(file) ? read(file) : null;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.join(root,'launcher.mjs')) try {

@@ -1,25 +1,52 @@
 $aui=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'AdvancedPanel.zh-CN.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $script:engineOptionControls=@{}
 $script:engineOptionRows=@{}
-$engineGroup=Combo-At $advancedTab 14 12 210 @($aui.all)
+$engineBody=New-Object Windows.Forms.TableLayoutPanel
+$engineBody.Name='engine-body'; $engineBody.Dock='Fill'
+$engineBody.ColumnCount=1; $engineBody.RowCount=3
+[void]$engineBody.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new('Percent',100))
+[void]$engineBody.RowStyles.Add([Windows.Forms.RowStyle]::new('Absolute',40))
+[void]$engineBody.RowStyles.Add([Windows.Forms.RowStyle]::new('Percent',100))
+[void]$engineBody.RowStyles.Add([Windows.Forms.RowStyle]::new('Absolute',43))
+$advancedTab.Controls.Add($engineBody)
+$engineToolbar=New-Object Windows.Forms.Panel
+$engineToolbar.Name='engine-toolbar'; $engineToolbar.Dock='Fill'; $engineToolbar.Margin=[Windows.Forms.Padding]::Empty
+$engineBody.Controls.Add($engineToolbar,0,0)
+$engineGroup=Combo-At $engineToolbar 0 3 210 @($aui.all)
 foreach ($group in @($catalogue.engineOptionSpecs | ForEach-Object { $_.group } | Select-Object -Unique)) { $null=$engineGroup.Items.Add($group) }
-$engineSearchLabel=Label-At $advancedTab $aui.filter 236 15 45
+$engineSearchLabel=Label-At $engineToolbar $aui.filter 224 6 45
 $engineSearch=New-Object Windows.Forms.TextBox
-$engineSearch.SetBounds(284,12,514,28); $advancedTab.Controls.Add($engineSearch)
+$engineSearch.Name='engine-search'
+$engineToolbar.Controls.Add($engineSearch)
 $engineTabs=New-Object Windows.Forms.TabControl
-$engineTabs.SetBounds(10,52,798,396); $advancedTab.Controls.Add($engineTabs)
+$engineTabs.Name='engine-tabs'; $engineTabs.Dock='Fill'; $engineTabs.Margin=[Windows.Forms.Padding]::Empty
+$engineBody.Controls.Add($engineTabs,0,1)
 $engineEditPage=New-Object Windows.Forms.TabPage; $engineEditPage.Text=$aui.edit
 $enginePreviewPage=New-Object Windows.Forms.TabPage; $enginePreviewPage.Text=$aui.preview
 $engineReferencePage=New-Object Windows.Forms.TabPage; $engineReferencePage.Text=$aui.reference
 $engineTabs.TabPages.AddRange(@($engineEditPage,$enginePreviewPage,$engineReferencePage))
+$engineEdit=New-Object Windows.Forms.TableLayoutPanel
+$engineEdit.Name='engine-edit'; $engineEdit.Dock='Fill'
+$engineEdit.ColumnCount=1; $engineEdit.RowCount=2
+[void]$engineEdit.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new('Percent',100))
+[void]$engineEdit.RowStyles.Add([Windows.Forms.RowStyle]::new('Percent',100))
+[void]$engineEdit.RowStyles.Add([Windows.Forms.RowStyle]::new('Absolute',94))
+$engineEditPage.Controls.Add($engineEdit)
 $engineRows=New-Object Windows.Forms.FlowLayoutPanel
+$engineRows.Name='engine-rows'; $engineRows.Dock='Fill'; $engineRows.Margin=[Windows.Forms.Padding]::Empty
 $engineRows.FlowDirection='TopDown'; $engineRows.WrapContents=$false; $engineRows.AutoScroll=$true
-$engineEditPage.Controls.Add($engineRows)
+$engineEdit.Controls.Add($engineRows,0,0)
 $engineDetail=New-Object Windows.Forms.TextBox
+$engineDetail.Name='engine-detail'; $engineDetail.Dock='Fill'
 $engineDetail.ReadOnly=$true; $engineDetail.Multiline=$true; $engineDetail.ScrollBars='Vertical'
 $engineDetail.TabStop=$false
 $engineDetail.Text=$aui.notice
-$engineEditPage.Controls.Add($engineDetail)
+$engineEdit.Controls.Add($engineDetail,0,1)
+if (-not $script:panelHighContrast) {
+    $engineDetail.BackColor=$panelColors.background
+    $engineDetail.ForeColor=$panelColors.ink
+    $engineSearchLabel.ForeColor=$panelColors.muted
+}
 foreach ($s in $catalogue.engineOptionSpecs) {
     $key=[string]$s.key
     $row=New-Object Windows.Forms.Panel; $row.Margin=New-Object Windows.Forms.Padding(0,0,0,4)
@@ -33,9 +60,14 @@ foreach ($s in $catalogue.engineOptionSpecs) {
     })
     $c.Name='engine-option-'+$key; $c.Tag=$s
     $risk=Label-At $row ([string]$s.risk) 480 33 246
+    $label.AutoEllipsis=$true; $variable.AutoEllipsis=$true; $risk.AutoEllipsis=$true
+    if (-not $script:panelHighContrast) {
+        $row.BackColor=$panelColors.background
+        $variable.ForeColor=$panelColors.muted; $risk.ForeColor=$panelColors.muted
+    }
     $row.Tag=@{spec=$s;label=$label;variable=$variable;choice=$c;risk=$risk}
     $c.add_Enter({ param($sender,$eventArgs) Show-EngineDetail $sender.Tag })
-    $c.add_SelectedIndexChanged({ param($sender,$eventArgs) Show-EngineDetail $sender.Tag })
+    $c.add_SelectedIndexChanged({ param($sender,$eventArgs) if ($sender.Focused) { Show-EngineDetail $sender.Tag } })
     $script:engineOptionControls[$key]=$c; $script:engineOptionRows[$key]=$row
     $engineRows.Controls.Add($row)
 }
@@ -45,13 +77,22 @@ $enginePreview.WordWrap=$false; $enginePreview.ScrollBars='Both'; $enginePreview
 $enginePreview.TabStop=$false
 $enginePreview.add_Enter({ $enginePreview.Select(0,0) })
 $enginePreview.Font=New-Object Drawing.Font('Consolas',9); $enginePreviewPage.Controls.Add($enginePreview)
+$engineReferenceLayout=New-Object Windows.Forms.TableLayoutPanel
+$engineReferenceLayout.Name='engine-reference-layout'; $engineReferenceLayout.Dock='Fill'
+$engineReferenceLayout.ColumnCount=2; $engineReferenceLayout.RowCount=1
+[void]$engineReferenceLayout.RowStyles.Add([Windows.Forms.RowStyle]::new('Percent',100))
+[void]$engineReferenceLayout.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new('Percent',38))
+[void]$engineReferenceLayout.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new('Percent',62))
+$engineReferencePage.Controls.Add($engineReferenceLayout)
 $engineReference=New-Object Windows.Forms.TextBox
+$engineReference.Name='engine-reference'; $engineReference.Dock='Fill'
 $engineReference.ReadOnly=$true; $engineReference.Multiline=$true; $engineReference.ScrollBars='Vertical'
 $engineReference.WordWrap=$true; $engineReference.TabStop=$false
-$engineReference.Font=New-Object Drawing.Font('Microsoft YaHei UI',9); $engineReferencePage.Controls.Add($engineReference)
+$engineReferenceLayout.Controls.Add($engineReference,1,0)
 $engineReferenceList=New-Object Windows.Forms.ListBox
-$engineReferenceList.HorizontalScrollbar=$true
-$engineReferencePage.Controls.Add($engineReferenceList)
+$engineReferenceList.Name='engine-reference-list'; $engineReferenceList.Dock='Fill'
+$engineReferenceList.HorizontalScrollbar=$true; $engineReferenceList.IntegralHeight=$false
+$engineReferenceLayout.Controls.Add($engineReferenceList,0,0)
 $engineReferenceList.add_SelectedIndexChanged({
     if ($engineReferenceList.SelectedIndex -lt 0) { return }
     $entry=$script:filteredEngineReference[$engineReferenceList.SelectedIndex]
@@ -60,8 +101,10 @@ $engineReferenceList.add_SelectedIndexChanged({
     $engineReference.Text=($parts -join "`r`n") -replace '(?<!\r)\n',"`r`n"
     $engineReference.Select(0,0)
 })
-$engineReset=Button-At $advancedTab $ui.engineReset 618 474 180
-$engineReset.Anchor='Bottom,Right'
+$engineActions=New-Object Windows.Forms.Panel
+$engineActions.Name='engine-actions'; $engineActions.Dock='Fill'; $engineActions.Margin=[Windows.Forms.Padding]::Empty
+$engineBody.Controls.Add($engineActions,0,2)
+$engineReset=Button-At $engineActions $ui.engineReset 0 8 180
 function Show-EngineDetail($spec) {
     if (-not $spec) { return }
     $engineDetail.Text=$spec.label+' | '+$spec.risk+"`r`n"+($spec.env+$spec.flag)+"`r`n"+$spec.hint
@@ -90,34 +133,58 @@ function Filter-EngineOptions {
     $engineReference.Text=''
     if ($engineReferenceList.Items.Count) { $engineReferenceList.SelectedIndex=0 }
 }
+function Layout-EngineChrome([double]$scale) {
+    $engineGroup.SetBounds(0,[int](3*$scale),[int](210*$scale),[int](28*$scale))
+    $engineSearchLabel.SetBounds([int](224*$scale),[int](6*$scale),[int](46*$scale),[int](25*$scale))
+    $searchX=[int](272*$scale)
+    $engineSearch.SetBounds($searchX,[int](3*$scale),[math]::Max(0,$engineToolbar.ClientSize.Width-$searchX),[int](28*$scale))
+    $resetWidth=[int](180*$scale)
+    $engineReset.SetBounds([math]::Max(0,$engineActions.ClientSize.Width-$resetWidth),[int](8*$scale),$resetWidth,[int](32*$scale))
+}
+function Resize-EngineRows([double]$scale) {
+    if ($script:resizingEngineRows -or $script:scalingPanel -or -not $engineRows.Visible) { return }
+    # Use the window size, not the display rectangle (whose origin moves when scrolled).
+    $scrollWidth=[math]::Max([Windows.Forms.SystemInformation]::VerticalScrollBarWidth,[int](18*$scale))
+    $rowWidth=$engineRows.Width-$scrollWidth-[int](4*$scale)
+    if ($rowWidth -lt [int](100*$scale)) { return }
+    $script:resizingEngineRows=$true
+    $engineRows.SuspendLayout()
+    try {
+        foreach ($row in $script:engineOptionRows.Values) {
+            $row.Size=[Drawing.Size]::new($rowWidth,[int](64*$scale))
+            $row.Margin=[Windows.Forms.Padding]::new(0,0,0,[int](5*$scale))
+            $leftWidth=[int]($rowWidth*0.60); $valueX=$leftWidth+[int](16*$scale)
+            $valueWidth=$rowWidth-$valueX-[int](10*$scale)
+            $row.Tag.label.SetBounds([int](10*$scale),[int](4*$scale),$leftWidth,[int](26*$scale))
+            $row.Tag.variable.SetBounds([int](10*$scale),[int](33*$scale),$leftWidth,[int](24*$scale))
+            $row.Tag.choice.SetBounds($valueX,[int](5*$scale),$valueWidth,[int](26*$scale))
+            $row.Tag.risk.SetBounds($valueX,[int](33*$scale),$valueWidth,[int](24*$scale))
+        }
+    } finally {
+        try { $engineRows.ResumeLayout($true) } finally { $script:resizingEngineRows=$false }
+    }
+}
 function Layout-AdvancedPanel([double]$scale) {
-    if ([math]::Abs($enginePreview.Font.Size-9*$scale) -gt 0.01) {
+    $engineBody.Padding=[Windows.Forms.Padding]::new([int](12*$scale),[int](10*$scale),[int](12*$scale),[int](8*$scale))
+    $engineBody.RowStyles[0].Height=[single](40*$scale)
+    $engineBody.RowStyles[2].Height=[single](43*$scale)
+    $engineEdit.Padding=[Windows.Forms.Padding]::new([int](8*$scale))
+    $engineEdit.RowStyles[1].Height=[single](94*$scale)
+    $engineDetail.Margin=[Windows.Forms.Padding]::new(0,[int](8*$scale),0,0)
+    $engineReferenceLayout.Padding=[Windows.Forms.Padding]::new([int](6*$scale))
+    $enginePreviewPage.Padding=[Windows.Forms.Padding]::new([int](8*$scale))
+    if ([math]::Abs($enginePreview.Font.Size-$form.Font.Size) -gt 0.01) {
         $oldFont=$enginePreview.Font
-        $enginePreview.Font=New-Object Drawing.Font('Consolas',([single](9*$scale)))
+        $enginePreview.Font=[Drawing.Font]::new('Consolas',$form.Font.Size)
         $oldFont.Dispose()
     }
-    $width=$advancedTab.ClientSize.Width
-    $engineGroup.SetBounds([int](14*$scale),[int](12*$scale),[int](210*$scale),[int](28*$scale))
-    $engineSearchLabel.SetBounds([int](236*$scale),[int](15*$scale),[int](45*$scale),[int](25*$scale))
-    $engineSearch.SetBounds([int](284*$scale),[int](12*$scale),[math]::Max(60,$width-[int](302*$scale)),[int](28*$scale))
-    $engineTabs.SetBounds([int](10*$scale),[int](52*$scale),[math]::Max(100,$width-[int](20*$scale)),[math]::Max(100,$advancedTab.ClientSize.Height-[int](124*$scale)))
-    $engineRows.SetBounds([int](6*$scale),[int](6*$scale),[math]::Max(60,$engineEditPage.ClientSize.Width-[int](12*$scale)),[math]::Max(60,$engineEditPage.ClientSize.Height-[int](124*$scale)))
-    $engineDetail.SetBounds([int](6*$scale),$engineRows.Bottom+[int](6*$scale),$engineRows.Width,[int](100*$scale))
-    $refWidth=$engineReferencePage.ClientSize.Width; $refHeight=$engineReferencePage.ClientSize.Height
-    $listWidth=[int]($refWidth*0.38)
-    $engineReferenceList.SetBounds([int](6*$scale),[int](6*$scale),$listWidth,[math]::Max(40,$refHeight-[int](12*$scale)))
-    $engineReference.SetBounds($engineReferenceList.Right+[int](8*$scale),[int](6*$scale),[math]::Max(40,$refWidth-$engineReferenceList.Right-[int](14*$scale)),[math]::Max(40,$refHeight-[int](12*$scale)))
-    $rowWidth=[math]::Max(60,$engineRows.ClientSize.Width-[int](24*$scale))
-    foreach ($row in $script:engineOptionRows.Values) {
-        $row.Size=New-Object Drawing.Size($rowWidth,[int](64*$scale))
-        $leftWidth=[int]($rowWidth*0.62); $valueX=$leftWidth+[int](8*$scale); $valueWidth=$rowWidth-$valueX-[int](8*$scale)
-        $row.Tag.label.SetBounds([int](4*$scale),[int](3*$scale),$leftWidth,[int](25*$scale))
-        $row.Tag.variable.SetBounds([int](4*$scale),[int](31*$scale),$leftWidth,[int](25*$scale))
-        $row.Tag.choice.SetBounds($valueX,[int](4*$scale),$valueWidth,[int](28*$scale))
-        $row.Tag.risk.SetBounds($valueX,[int](33*$scale),$valueWidth,[int](25*$scale))
-    }
+    Layout-EngineChrome $scale
+    Resize-EngineRows $scale
 }
 $engineSearch.add_TextChanged({ Filter-EngineOptions })
 $engineGroup.add_SelectedIndexChanged({ Filter-EngineOptions })
-$engineTabs.add_SelectedIndexChanged({ Layout-AdvancedPanel (Panel-Scale) })
+$engineToolbar.add_ClientSizeChanged({ if (-not $script:scalingPanel) { Layout-EngineChrome (Panel-Scale) } })
+$engineActions.add_ClientSizeChanged({ if (-not $script:scalingPanel) { Layout-EngineChrome (Panel-Scale) } })
+$engineRows.add_ClientSizeChanged({ Resize-EngineRows (Panel-Scale) })
+$engineRows.add_VisibleChanged({ Resize-EngineRows (Panel-Scale) })
 Filter-EngineOptions

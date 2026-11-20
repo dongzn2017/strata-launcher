@@ -99,8 +99,8 @@ export function check(request, deployment) {
   const advanced = engineOptions(request.engineOptions);
   const envOverrides = engineOverrides(advanced);
   const engineIdentity = engineOptionIdentity(advanced);
-  if (extraEngineOptionSpecs.some(spec => advanced[spec.key] !== 'default') && !['0.1.59','0.1.60'].includes(deployment.engineVersion)) {
-    throw new Error('Extended engine options are curated for engines 0.1.59/0.1.60; leave them at default on other versions');
+  if (extraEngineOptionSpecs.some(spec => advanced[spec.key] !== 'default') && !['0.1.59','0.1.60','0.1.62'].includes(deployment.engineVersion)) {
+    throw new Error('Extended engine options are curated for engines 0.1.59/0.1.60/0.1.62; leave them at default on other versions');
   }
   if (advanced.pleIo === 'ram' && settings.expertGiB + settings.headroomGiB + 29 > os.totalmem()/2**30) {
     throw new Error('PLE RAM mode plus expert budget and headroom exceeds physical RAM');

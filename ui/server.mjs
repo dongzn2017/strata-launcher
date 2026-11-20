@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {read, stateRoot} from '../scripts/strata-panel/core.mjs';
+import {runCommand} from '../launcher.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -12,6 +13,7 @@ const launcher = path.join(root, 'launcher.mjs');
 const page = path.join(here, 'index.html');
 const terminalStates = ['stopped', 'exited', 'error'];
 const runId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const profileId = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 function runCli(args) {
   return new Promise(resolve => {
@@ -19,8 +21,8 @@ function runCli(args) {
       env: {...process.env, PYTHONUTF8: '1', PYTHONNOUSERSITE: '1'}});
     let out = '';
     let err = '';
-    child.stdout.on('data', d => { out += d; });
-    child.stderr.on('data', d => { err += d; });
+    child.stdout.setEncoding('utf8').on('data', d => { out += d; });
+    child.stderr.setEncoding('utf8').on('data', d => { err += d; });
     child.on('error', error => resolve({ok: false, error: error.message}));
     child.on('close', code => {
       if (!out.trim()) { resolve({ok: false, error: err.trim() || `launcher exited with ${code}`}); return; }
@@ -74,22 +76,28 @@ function startRun(id) {
       env: {...process.env, PYTHONUTF8: '1', PYTHONNOUSERSITE: '1'}});
     starting = {id, child};
     let buffer = '', reported = false, err = '';
-    const finish = value => { if (!reported) { reported = true; resolve(value); } };
-    child.stdout.on('data', d => {
+    const timer = setTimeout(() => finish({ok: false, error: 'Start did not return a run ID within 60 seconds; check before retrying'}), 60000);
+    const finish = value => {
+      if (reported) return;
+      reported = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    child.stdout.setEncoding('utf8').on('data', d => {
+      if (reported) return;
       buffer += d;
       if (!reported && buffer.includes('{')) {
         const parsed = firstJson(buffer);
-        if (parsed?.id) { starting.runId = parsed.id; finish(parsed); }
+        if (parsed && runId.test(parsed.id)) finish(parsed);
       }
       if (buffer.length > 1 << 20) buffer = buffer.slice(-4096);
     });
-    child.stderr.on('data', d => { err += d; });
+    child.stderr.setEncoding('utf8').on('data', d => { err = (err + d).slice(-4096); });
     child.on('error', error => { starting = null; finish({ok: false, error: error.message}); });
     child.on('close', code => {
       starting = null;
       if (!reported) finish({ok: false, error: err.trim() || `start exited with ${code}`});
     });
-    setTimeout(() => finish({ok: false, error: 'start produced no run record within 60 s'}), 60000);
   });
 }
 
@@ -97,27 +105,41 @@ const routes = {
   'GET /api/doctor': async url => runCli(url.searchParams.get('profile') ? ['doctor', url.searchParams.get('profile')] : ['doctor']),
   'GET /api/list': () => runCli(['list']),
   'GET /api/check': async url => runCli(['check', url.searchParams.get('id')]),
-  'GET /api/status': async url => runCli(['status', url.searchParams.get('id')]),
+  'GET /api/status': url => runCommand('status', url.searchParams.get('id')),
   'GET /api/runs': () => activeRuns(),
   'POST /api/start': url => startRun(url.searchParams.get('id')),
-  'POST /api/stop': async url => runCli(['stop', url.searchParams.get('id')]),
+  'POST /api/stop': url => runCommand('stop', url.searchParams.get('id')),
 };
 
 const server = http.createServer(async (request, response) => {
-  const url = new URL(request.url, 'http://127.0.0.1');
+  const host = `127.0.0.1:${request.socket.localPort}`;
+  const origin = `http://${host}`;
   const send = (code, value, type = 'application/json') => {
     const body = typeof value === 'string' ? value : JSON.stringify(value);
     response.writeHead(code, {'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-store'});
     response.end(body);
   };
+  if (request.headers.host !== host || (request.headers.origin && request.headers.origin !== origin) ||
+      request.headers['sec-fetch-site'] === 'cross-site' ||
+      (request.method === 'POST' && request.headers['x-strata-panel'] !== '1')) {
+    return send(403, {ok: false, error: 'Use the local panel address to access this service'});
+  }
+  let url;
+  try {
+    if (!request.url.startsWith('/') || request.url.startsWith('//')) throw new Error();
+    url = new URL(request.url, origin);
+    if (url.origin !== origin) throw new Error();
+  } catch { return send(400, {ok: false, error: 'Invalid request URL'}); }
   if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
     try { return send(200, fs.readFileSync(page, 'utf8'), 'text/html'); }
     catch { return send(500, 'ui/index.html is missing', 'text/plain'); }
   }
   const handler = routes[`${request.method} ${url.pathname}`];
   if (!handler) return send(404, {ok: false, error: 'unknown endpoint'});
-  const needId = ['check', 'status', 'start', 'stop'].includes(url.pathname.slice(5));
-  if (needId && !runId.test(url.searchParams.get('id') ?? '') && !/^[A-Za-z0-9._-]+$/.test(url.searchParams.get('id') ?? '')) {
+  const ids = {'/api/doctor': profileId, '/api/check': profileId, '/api/start': profileId, '/api/status': runId, '/api/stop': runId};
+  const id = url.searchParams.get('id');
+  if (ids[url.pathname] && (url.pathname !== '/api/doctor' || url.searchParams.has('profile')) &&
+      !ids[url.pathname].test((url.pathname === '/api/doctor' ? url.searchParams.get('profile') : id) ?? '')) {
     return send(400, {ok: false, error: 'missing or invalid id'});
   }
   try { send(200, await handler(url)); }
@@ -129,6 +151,10 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   console.error('Usage: node ui/server.mjs [PORT]');
   process.exitCode = 2;
 } else {
+  server.on('error', error => {
+    console.error(error.code === 'EADDRINUSE' ? `Web panel port ${port} is already in use; choose another port.` : error.message);
+    process.exitCode = 2;
+  });
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({panel: `http://127.0.0.1:${port}/`, root})));
 }
 

@@ -68,6 +68,16 @@ $script:runnerOutput = $null
 $script:reportedExit = $null
 $script:allowClose = $false
 $font = New-Object Drawing.Font('Microsoft YaHei UI', 9)
+$script:panelHighContrast=[Windows.Forms.SystemInformation]::HighContrast
+$panelColors=@{
+    background=[Drawing.Color]::FromArgb(241,245,247)
+    surface=[Drawing.Color]::White
+    ink=[Drawing.Color]::FromArgb(25,42,50)
+    muted=[Drawing.Color]::FromArgb(69,89,99)
+    border=[Drawing.Color]::FromArgb(208,219,224)
+    accent=[Drawing.Color]::FromArgb(18,103,92)
+    danger=[Drawing.Color]::FromArgb(153,52,42)
+}
 function Label-At($parent, [string]$text, [int]$x, [int]$y, [int]$width = 180) {
     $c = New-Object Windows.Forms.Label
     $c.Text = $text; $c.Location = New-Object Drawing.Point($x, $y); $c.Size = New-Object Drawing.Size($width, 25)
@@ -76,6 +86,11 @@ function Label-At($parent, [string]$text, [int]$x, [int]$y, [int]$width = 180) {
 function Button-At($parent, [string]$text, [int]$x, [int]$y, [int]$width = 120) {
     $c = New-Object Windows.Forms.Button
     $c.Text = $text; $c.Location = New-Object Drawing.Point($x, $y); $c.Size = New-Object Drawing.Size($width, 32)
+    if (-not $script:panelHighContrast) {
+        $c.FlatStyle='Flat'; $c.BackColor=$panelColors.surface; $c.ForeColor=$panelColors.ink
+        $c.FlatAppearance.BorderColor=$panelColors.border
+        $c.FlatAppearance.MouseOverBackColor=$panelColors.background
+    }
     $parent.Controls.Add($c); return $c
 }
 function Combo-At($parent, [int]$x, [int]$y, [int]$width, [object[]]$items) {
@@ -103,8 +118,22 @@ $form.AutoScaleMode = 'None'
 $form.Text = $ui.title; $form.Font = $font; $form.StartPosition = 'CenterScreen'
 $form.ClientSize = New-Object Drawing.Size(860, 764)
 $form.MinimumSize = New-Object Drawing.Size(880, 804)
+if (-not $script:panelHighContrast) {
+    $form.BackColor=$panelColors.background; $form.ForeColor=$panelColors.ink
+}
+$header=New-Object Windows.Forms.Panel
+$header.Name='launcher-header'
+$header.Size=New-Object Drawing.Size(860,76)
+$form.Controls.Add($header)
+$brand=Label-At $header 'Strata Launcher' 18 9 320
+$brand.Font=New-Object Drawing.Font($font.FontFamily,[single]14,[Drawing.FontStyle]::Bold)
+$runtimeTag=Label-At $header '' 400 13 440
+$runtimeTag.TextAlign='MiddleRight'; $runtimeTag.AutoEllipsis=$true
+if (-not $script:panelHighContrast) {
+    $header.BackColor=$panelColors.surface; $runtimeTag.ForeColor=$panelColors.muted
+}
 $tabs = New-Object Windows.Forms.TabControl
-$tabs.Location = New-Object Drawing.Point(12, 56); $tabs.Size = New-Object Drawing.Size(836, 565)
+$tabs.Location = New-Object Drawing.Point(12, 84); $tabs.Size = New-Object Drawing.Size(836, 542)
 $tabs.Anchor = 'Top,Bottom,Left,Right'; $form.Controls.Add($tabs)
 $modelTab = New-Object Windows.Forms.TabPage; $modelTab.Text = $ui.qwenPage
 $advancedTab = New-Object Windows.Forms.TabPage; $advancedTab.Text = $ui.advanced
@@ -130,11 +159,10 @@ $learningTab.Size = $tabs.DisplayRectangle.Size
 $samplingTab.Size = $tabs.DisplayRectangle.Size
 $deepseekTab.Size = $tabs.DisplayRectangle.Size
 $helpTab.Size = $tabs.DisplayRectangle.Size
-$null = Label-At $form $ui.preset 18 16 175
+$presetLabel=Label-At $header $ui.preset 18 43 139
 $profiles = @($catalogue.profiles | Where-Object { $_.available })
 if ($profiles.Count -eq 0) { throw 'No installed Strata model profiles available' }
-$preset = Combo-At $form 200 12 630 @($profiles | ForEach-Object { $_.label })
-$preset.Anchor='Top,Left,Right'
+$preset = Combo-At $header 160 41 680 @($profiles | ForEach-Object { $_.label })
 $script:controls = @{}
 $script:modelLabels = @{}
 $specs = @(
@@ -147,9 +175,9 @@ $specs = @(
     @('port',1024,65535,1), @('visionThreads',1,12,1), @('imageTokens',64,1024,32),
     @('drafting',@('mtp','dflash2'))
 )
-for ($i = 0; $i -lt $specs.Count; $i++) {
-    $s = $specs[$i]; $key = $s[0]; $col = $i % 2; $row = [math]::Floor($i / 2)
-    $x = 18 + 405 * $col; $y = 30 + 51 * $row
+foreach ($s in $specs) {
+    $key = $s[0]
+    $x = 18; $y = 30
     $script:modelLabels[$key] = Label-At $modelTab $ui.$key $x $y 190
     if ($s.Count -eq 2) { $c = Combo-At $modelTab ($x+195) ($y-2) 180 $s[1] }
     else {
@@ -160,6 +188,17 @@ for ($i = 0; $i -lt $specs.Count; $i++) {
         $c.ThousandsSeparator = $key -ne 'port'; $modelTab.Controls.Add($c)
     }
     $script:controls[$key] = $c
+}
+$modelSections=@(
+    @{title=$ui.modelContextGroup; keys=@('context','kv','kvResident','port')},
+    @{title=$ui.modelResourceGroup; keys=@('expertGiB','headroomGiB','vramMiB','workers')},
+    @{title=$ui.modelGenerationGroup; keys=@('output','thinking','effort','drafting')},
+    @{title=$ui.modelVisionGroup; keys=@('spec','specMinP','visionThreads','imageTokens')}
+)
+foreach ($section in $modelSections) {
+    $section.heading=Label-At $modelTab $section.title 18 12 375
+    $section.heading.Font=New-Object Drawing.Font($font.FontFamily,[single]10,[Drawing.FontStyle]::Bold)
+    if (-not $script:panelHighContrast) { $section.heading.ForeColor=$panelColors.accent }
 }
 . (Join-Path $PSScriptRoot 'DraftPanel.ps1')
 $script:deepseekControls = @{}
@@ -242,8 +281,7 @@ $helpList.add_SelectedIndexChanged({
 })
 $helpList.SelectedIndex=0
 $deployment = $catalogue.deployment
-$engineInfo = Label-At $modelTab ('Configured Control '+$deployment.control_version+' / engine '+$deployment.engine_package_version+' / single user') 18 488 785
-$engineInfo.Anchor='Bottom,Left'
+$runtimeTag.Text='Control '+$deployment.control_version+'  /  Engine '+$deployment.engine_package_version
 . (Join-Path $PSScriptRoot 'AdvancedPanel.ps1')
 $samplingCustom = New-Object Windows.Forms.CheckBox
 $samplingCustom.Text=$ui.samplingCustom; $samplingCustom.Checked=$false
@@ -321,17 +359,36 @@ foreach ($key in $fieldNames) { $index = $fieldList.Items.Add($ui.$key); $fieldL
 $footer = New-Object Windows.Forms.CheckBox
 $footer.Text = $ui.footer; $footer.Checked = $true; $footer.Location = New-Object Drawing.Point(500, 404)
 $footer.Size = New-Object Drawing.Size(285, 30); $piTab.Controls.Add($footer)
-$status = Label-At $form $ui.offline 18 630 815
-$status.Anchor = 'Bottom,Left,Right'; $status.Height = 40
-$saveStatus = Label-At $form $ui.preferencesLoaded 18 679 815
-$saveStatus.Anchor = 'Bottom,Left,Right'
-$start = Button-At $form $ui.start 18 714 120
-$openPi = Button-At $form $ui.openPi 150 714 120
-$refresh = Button-At $form $ui.refresh 282 714 116
-$monitor = Button-At $form $ui.systemMonitor 410 714 116
-$save = Button-At $form $ui.save 538 714 170
-$close = Button-At $form $ui.close 720 714 120
-foreach ($b in @($start,$openPi,$refresh,$monitor,$save,$close)) { $b.Anchor = 'Bottom,Left' }
+$actionBar=New-Object Windows.Forms.Panel
+$actionBar.Name='launcher-actions'
+$form.Controls.Add($actionBar)
+$statusMark=New-Object Windows.Forms.Panel
+$actionBar.Controls.Add($statusMark)
+$status = Label-At $actionBar $ui.offline 24 10 815
+$status.AutoEllipsis=$true; $status.Height=40
+$saveStatus = Label-At $actionBar $ui.preferencesLoaded 24 56 815
+$saveStatus.AutoEllipsis=$true
+$start = Button-At $actionBar $ui.start 18 89 120
+$openPi = Button-At $actionBar $ui.openPi 150 89 120
+$refresh = Button-At $actionBar $ui.refresh 282 89 116
+$monitor = Button-At $actionBar $ui.systemMonitor 410 89 116
+$save = Button-At $actionBar $ui.save 538 89 170
+$close = Button-At $actionBar $ui.close 720 89 120
+$buttons=@($start,$openPi,$refresh,$monitor,$save,$close)
+if (-not $script:panelHighContrast) {
+    $actionBar.BackColor=$panelColors.surface
+    $saveStatus.ForeColor=$panelColors.muted
+    $start.BackColor=$panelColors.accent; $start.ForeColor=$panelColors.surface
+    $start.FlatAppearance.BorderColor=$panelColors.accent
+    $start.FlatAppearance.MouseOverBackColor=[Drawing.Color]::FromArgb(14,83,74)
+    $statusMark.BackColor=$panelColors.border
+    $status.add_TextChanged({
+        $statusMark.BackColor=if ($status.Text.StartsWith($ui.ready) -or $status.Text.StartsWith($ui.external)) { $panelColors.accent }
+        elseif ($status.Text.StartsWith($ui.loading)) { [Drawing.Color]::FromArgb(162,110,21) }
+        elseif ($status.Text.StartsWith('Model launch failed')) { $panelColors.danger }
+        else { $panelColors.border }
+    })
+}
 function Panel-Scale {
     return [math]::Max([double]$form.DeviceDpi/96,[double]$form.Font.Size/9)
 }
@@ -348,13 +405,41 @@ function Layout-Panel {
     $script:layingOutPanel=$true
     try {
         $scale=Panel-Scale
-        foreach ($button in @($start,$openPi,$refresh,$monitor,$save,$close)) { $button.Top=$form.ClientSize.Height-[int](50*$scale) }
-        $saveStatus.Top=$form.ClientSize.Height-[int](85*$scale)
-        $status.Top=$form.ClientSize.Height-[int](134*$scale)
-        $tabs.Height=[math]::Max([int](350*$scale),$status.Top-$tabs.Top-[int](9*$scale))
-        foreach ($page in $tabs.TabPages) { $page.Size=$tabs.DisplayRectangle.Size }
-        $engineInfo.SetBounds([int](18*$scale),$modelTab.ClientSize.Height-[int](45*$scale),[math]::Max(40,$modelTab.ClientSize.Width-[int](36*$scale)),[int](25*$scale))
-        $engineReset.SetBounds($advancedTab.ClientSize.Width-[int](198*$scale),$advancedTab.ClientSize.Height-[int](62*$scale),[int](180*$scale),[int](32*$scale))
+        $width=$form.ClientSize.Width
+        $footerHeight=[int](130*$scale)
+        $header.SetBounds(0,0,$width,[int](76*$scale))
+        $brand.SetBounds([int](18*$scale),[int](8*$scale),[int](264*$scale),[int](29*$scale))
+        $runtimeTag.SetBounds([int](302*$scale),[int](10*$scale),($width-[int](320*$scale)),[int](24*$scale))
+        $presetLabel.SetBounds([int](18*$scale),[int](43*$scale),[int](138*$scale),[int](25*$scale))
+        $preset.SetBounds([int](160*$scale),[int](41*$scale),($width-[int](178*$scale)),[int](24*$scale))
+        $actionBar.SetBounds(0,($form.ClientSize.Height-$footerHeight),$width,$footerHeight)
+        $statusMark.SetBounds([int](18*$scale),[int](12*$scale),[int](3*$scale),[int](36*$scale))
+        $status.SetBounds([int](28*$scale),[int](9*$scale),($width-[int](46*$scale)),[int](42*$scale))
+        $saveStatus.SetBounds([int](28*$scale),[int](54*$scale),($width-[int](46*$scale)),[int](24*$scale))
+        $buttonWidths=@(120,120,116,116,170,120)
+        $left=[int](18*$scale)
+        for ($i=0; $i -lt $buttons.Count; $i++) {
+            $buttonWidth=[int]($buttonWidths[$i]*$scale)
+            if ($buttons[$i] -eq $close) { $left=$width-$buttonWidth-[int](18*$scale) }
+            $buttons[$i].SetBounds($left,[int](87*$scale),$buttonWidth,[int](32*$scale))
+            $left+=$buttonWidth+[int](12*$scale)
+        }
+        $tabs.SetBounds([int](12*$scale),[int](84*$scale),($width-[int](24*$scale)),[math]::Max(100,$actionBar.Top-[int](92*$scale)))
+        $pageWidth=$tabs.DisplayRectangle.Width
+        $columnWidth=[math]::Floor(($pageWidth-[int](54*$scale))/2)
+        for ($j=0; $j -lt $modelSections.Count; $j++) {
+            $section=$modelSections[$j]
+            $x=[int](18*$scale)+($j%2)*($columnWidth+[int](18*$scale))
+            $y=[int]((14+215*[math]::Floor($j/2))*$scale)
+            $section.heading.SetBounds($x,$y,$columnWidth,[int](26*$scale))
+            $labelWidth=[math]::Floor($columnWidth*0.52)
+            for ($k=0; $k -lt $section.keys.Count; $k++) {
+                $key=$section.keys[$k]
+                $rowY=$y+[int]((36+38*$k)*$scale)
+                $script:modelLabels[$key].SetBounds($x,($rowY+[int](2*$scale)),$labelWidth,[int](28*$scale))
+                $script:controls[$key].SetBounds(($x+$labelWidth+[int](8*$scale)),$rowY,($columnWidth-$labelWidth-[int](8*$scale)),[int](26*$scale))
+            }
+        }
         Layout-AdvancedPanel $scale
         $dsTabs.SetBounds([int](10*$scale),[int](12*$scale),[math]::Max(40,$deepseekTab.ClientSize.Width-[int](20*$scale)),[math]::Max(40,$deepseekTab.ClientSize.Height-[int](24*$scale)))
         foreach ($page in $script:dsPages.Values) { $page.Size=$dsTabs.DisplayRectangle.Size }
@@ -366,8 +451,9 @@ function Layout-Panel {
         Layout-DraftPanel $scale
     } finally { $script:layingOutPanel=$false }
 }
-$form.add_Resize({ Layout-Panel })
+$form.add_ClientSizeChanged({ Layout-Panel })
 $form.add_FontChanged({ Layout-Panel })
+$form.add_Shown({ Layout-Panel })
 foreach ($page in $script:dsPages.Values) { $page.add_SizeChanged({ Layout-DeepSeekHelp }) }
 $monitorMenu = New-Object Windows.Forms.ContextMenuStrip
 $monitorOrdinary = $monitorMenu.Items.Add($ui.monitorOrdinary)
@@ -839,6 +925,7 @@ $dsModelStart.add_Click({ $start.PerformClick() })
 $dsPiOpen.add_Click({ Open-SelectedPi })
 $dsPiSettings.add_Click({ $tabs.SelectedTab=$piTab })
 $tabs.add_SelectedIndexChanged({
+    Layout-Panel
     if ($tabs.SelectedTab -eq $lanTab -and -not $SelfTest) { Start-LanOperation 'PanelStatus' }
     if ($tabs.SelectedTab -eq $deepseekTab -and -not (Is-DeepSeek)) {
         for ($i=0; $i -lt $profiles.Count; $i++) {
@@ -909,6 +996,7 @@ $timer.add_Tick({
 $form.AutoScaleDimensions=New-Object Drawing.SizeF(96,96); $form.AutoScaleMode='Dpi'
 $small.AutoScaleDimensions=New-Object Drawing.SizeF(96,96); $small.AutoScaleMode='Dpi'
 $form.ResumeLayout($true); $small.ResumeLayout($true)
+Layout-Panel
 function Layout-Errors($containers) {
     foreach ($container in $containers) {
         $children=@($container.Controls | Where-Object { $_.Width -gt 0 -and $_.Height -gt 0 })
@@ -938,6 +1026,11 @@ function Save-WindowImage($window, [string]$file) {
 }
 if ($ResourceSelfTest) {
     . (Join-Path $PSScriptRoot 'ResourcePanel.test.ps1')
+    exit 0
+}
+if ($AdvancedSelfTest) {
+    try { . (Join-Path $PSScriptRoot 'AdvancedPanel.test.ps1') }
+    finally { $script:allowClose=$true; $small.Dispose(); $form.Dispose(); $http.Dispose(); $monitorMenu.Dispose(); $tooltips.Dispose() }
     exit 0
 }
 if ($SelfTest) {
