@@ -1,10 +1,10 @@
-# Strata 启动器 1.2.0
+# Strata 启动器 1.3.0
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
 用 Windows 图形面板或 JSON / CLI 管理 [Strata](https://github.com/Niko1221/Strata)：启动、停止、调参、查显存、关闭所选进程、终端监控，以及可选的 Pi 和局域网推理转发。
 
-这是独立启动器，不是 Strata Desktop，也不是引擎/模型下载器。1.2.0 已将作者日常使用的 WinForms 界面做成便携适配；不附带私人路径、会话、插件、watchdog 状态、凭据或模型权重。
+这是独立启动器，不是 Strata Desktop，也不是引擎/模型下载器。1.3.0 在 1.2.0 基础上新增零依赖本地网页控制台；所有既有命令行为不变。1.2.0 已将作者日常使用的 WinForms 界面做成便携适配；不附带私人路径、会话、插件、watchdog 状态、凭据或模型权重。
 
 ## 单卡 5070 + 64GB：我的现阶段最佳自用配置
 
@@ -21,6 +21,10 @@
 [完整配置快照](conf/presets/rtx5070-64g.iq4-xs-v31.json) · [配置说明、套用方法与限制](docs/RTX5070-64G.zh-CN.md)
 
 168 MiB 很激进，不是全部驱动/引擎余量；照抄不稳定时应增加余量或降低 RAM。`kvGrow=on` 只是请求，KV streaming 时引擎可能关闭；auto 模式下保存的手动窗口 4 不代表实际窗口。tail skip 继承默认，不等于强制关闭或无损推理。
+
+## 网页控制台
+
+先配置私有 `conf/launcher.json`，再执行 `node launcher.mjs webpanel`（可加端口，默认 8444），浏览器打开 `http://127.0.0.1:8444/`。零依赖本地服务桥接同一套 CLI：环境诊断、模型配置、检查、启动、停止、运行状态。只监听回环地址，不会自行启动任何东西。
 
 ## Windows 图形启动器
 

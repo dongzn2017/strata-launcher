@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+- Added `node launcher.mjs webpanel [PORT]`: a dependency-free loopback web console (default 8444) bridging the same CLI — doctor, profiles, check, start, stop, live runs. Dark animated single-page UI; no new capabilities, no external requests, nothing starts by itself.
+- The WinForms `npm run panel`, `Strata-Panel.cmd` and every existing CLI command are unchanged.
+- Validation: 44 offline Node tests plus web console checked in a real browser (render, doctor/list/check round-trips with a live config); Python suite unchanged.
+
 ## 1.2.0
 
 - Portable Windows WinForms panel adapted from the author's daily launcher; the existing JSON CLI remains supported.

@@ -1,6 +1,6 @@
-# Agent Runbook: Strata Launcher 1.2.0
+# Agent Runbook: Strata Launcher 1.3.0
 
-This repository contains a portable CLI and a Windows WinForms panel. The author's 5070/64GB preset is a settings snapshot, not a universal optimum or verified performance benchmark. Never copy local credentials, real LAN addresses, runtime state, weights or Pi watchdog budgets into this repository.
+This repository contains a portable CLI, a Windows WinForms panel and a loopback web console (`ui/`, `node launcher.mjs webpanel`). The author's 5070/64GB preset is a settings snapshot, not a universal optimum or verified performance benchmark. Never copy local credentials, real LAN addresses, runtime state, weights or Pi watchdog budgets into this repository.
 
 ## Command Contract
 

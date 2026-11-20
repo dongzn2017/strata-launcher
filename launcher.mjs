@@ -24,7 +24,8 @@ const usage = 'Usage:\n' +
   '  node launcher.mjs monitor PROFILE [--once]\n' +
   '  node launcher.mjs monitor --url URL [--once]\n' +
   '  node launcher.mjs lan-plan PROFILE | lan PROFILE\n' +
-  '  node launcher.mjs lan-status LAN_ID | lan-stop LAN_ID';
+  '  node launcher.mjs lan-status LAN_ID | lan-stop LAN_ID\n' +
+  '  node launcher.mjs webpanel [PORT]         open the local web console (default 8444)';
 const runId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const terminalStates = ['stopped', 'exited', 'error'];
 
@@ -227,6 +228,14 @@ async function main([command, id, ...extra]) {
     const report = await doctor(id);
     if (!report.ok) process.exitCode = 3;
     return report;
+  }
+  if (command === 'webpanel') {
+    if (extra.length || (id !== undefined && !/^\d{4,5}$/.test(id))) throw new Error(usage);
+    const child = spawn(process.execPath, [path.join(root, 'ui/server.mjs'), ...(id ? [id] : [])],
+      {cwd: root, stdio: 'inherit', windowsHide: true});
+    const [code] = await once(child, 'exit');
+    process.exitCode = code ?? 1;
+    return;
   }
   if (!['list', 'check', 'prepare', 'start', 'status', 'stop'].includes(command) || extra.length ||
       (command === 'list' ? id !== undefined : !id)) throw new Error(usage);

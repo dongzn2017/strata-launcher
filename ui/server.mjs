@@ -1,0 +1,137 @@
+// Local control panel: one loopback HTTP server bridging the CLI, no dependencies.
+import {spawn} from 'node:child_process';
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {read, stateRoot} from '../scripts/strata-panel/core.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, '..');
+const launcher = path.join(root, 'launcher.mjs');
+const page = path.join(here, 'index.html');
+const terminalStates = ['stopped', 'exited', 'error'];
+const runId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function runCli(args) {
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, [launcher, ...args], {cwd: root, windowsHide: true,
+      env: {...process.env, PYTHONUTF8: '1', PYTHONNOUSERSITE: '1'}});
+    let out = '';
+    let err = '';
+    child.stdout.on('data', d => { out += d; });
+    child.stderr.on('data', d => { err += d; });
+    child.on('error', error => resolve({ok: false, error: error.message}));
+    child.on('close', code => {
+      if (!out.trim()) { resolve({ok: false, error: err.trim() || `launcher exited with ${code}`}); return; }
+      try { resolve(JSON.parse(out)); }
+      catch { resolve({ok: false, error: 'launcher printed non-JSON output', raw: out.slice(0, 2000)}); }
+    });
+  });
+}
+
+function activeRuns() {
+  const directory = path.join(stateRoot, 'runs');
+  if (!fs.existsSync(directory)) return [];
+  const active = [];
+  for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
+    if (!entry.isDirectory()) continue;
+    const file = path.join(directory, entry.name, 'status.json');
+    if (!fs.existsSync(file)) continue;
+    try {
+      const status = read(file);
+      if (!terminalStates.includes(status.state)) active.push({id: entry.name, state: status.state, model: status.model});
+    } catch { active.push({id: entry.name, state: 'unreadable'}); }
+  }
+  return active;
+}
+
+// The launcher start command prints its run JSON first, then inherits the engine's stdout.
+function firstJson(buffer) {
+  let depth = 0, start = -1, inString = false, escape = false;
+  for (let i = 0; i < buffer.length; i++) {
+    const c = buffer[i];
+    if (start < 0) { if (c === '{') { start = i; depth = 1; } continue; }
+    if (inString) {
+      if (escape) escape = false;
+      else if (c === '\\') escape = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '{') depth++;
+    else if (c === '}') { depth--; if (!depth) { try { return JSON.parse(buffer.slice(start, i + 1)); } catch { return null; } } }
+  }
+  return null;
+}
+
+let starting = null;
+function startRun(id) {
+  if (starting) return Promise.resolve({ok: false, error: 'a start is already in progress'});
+  if (activeRuns().length) return Promise.resolve({ok: false, error: 'Launcher-owned runs are still active; stop them first'});
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, [launcher, 'start', id], {cwd: root, windowsHide: true,
+      env: {...process.env, PYTHONUTF8: '1', PYTHONNOUSERSITE: '1'}});
+    starting = {id, child};
+    let buffer = '', reported = false, err = '';
+    const finish = value => { if (!reported) { reported = true; resolve(value); } };
+    child.stdout.on('data', d => {
+      buffer += d;
+      if (!reported && buffer.includes('{')) {
+        const parsed = firstJson(buffer);
+        if (parsed?.id) { starting.runId = parsed.id; finish(parsed); }
+      }
+      if (buffer.length > 1 << 20) buffer = buffer.slice(-4096);
+    });
+    child.stderr.on('data', d => { err += d; });
+    child.on('error', error => { starting = null; finish({ok: false, error: error.message}); });
+    child.on('close', code => {
+      starting = null;
+      if (!reported) finish({ok: false, error: err.trim() || `start exited with ${code}`});
+    });
+    setTimeout(() => finish({ok: false, error: 'start produced no run record within 60 s'}), 60000);
+  });
+}
+
+const routes = {
+  'GET /api/doctor': async url => runCli(url.searchParams.get('profile') ? ['doctor', url.searchParams.get('profile')] : ['doctor']),
+  'GET /api/list': () => runCli(['list']),
+  'GET /api/check': async url => runCli(['check', url.searchParams.get('id')]),
+  'GET /api/status': async url => runCli(['status', url.searchParams.get('id')]),
+  'GET /api/runs': () => activeRuns(),
+  'POST /api/start': url => startRun(url.searchParams.get('id')),
+  'POST /api/stop': async url => runCli(['stop', url.searchParams.get('id')]),
+};
+
+const server = http.createServer(async (request, response) => {
+  const url = new URL(request.url, 'http://127.0.0.1');
+  const send = (code, value, type = 'application/json') => {
+    const body = typeof value === 'string' ? value : JSON.stringify(value);
+    response.writeHead(code, {'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-store'});
+    response.end(body);
+  };
+  if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
+    try { return send(200, fs.readFileSync(page, 'utf8'), 'text/html'); }
+    catch { return send(500, 'ui/index.html is missing', 'text/plain'); }
+  }
+  const handler = routes[`${request.method} ${url.pathname}`];
+  if (!handler) return send(404, {ok: false, error: 'unknown endpoint'});
+  const needId = ['check', 'status', 'start', 'stop'].includes(url.pathname.slice(5));
+  if (needId && !runId.test(url.searchParams.get('id') ?? '') && !/^[A-Za-z0-9._-]+$/.test(url.searchParams.get('id') ?? '')) {
+    return send(400, {ok: false, error: 'missing or invalid id'});
+  }
+  try { send(200, await handler(url)); }
+  catch (error) { send(500, {ok: false, error: String(error?.message ?? error)}); }
+});
+
+const port = Number(process.argv[2] ?? 8444);
+if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+  console.error('Usage: node ui/server.mjs [PORT]');
+  process.exitCode = 2;
+} else {
+  server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({panel: `http://127.0.0.1:${port}/`, root})));
+}
+
+const shutdown = () => { try { starting?.child?.kill(); } catch {} server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000); };
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

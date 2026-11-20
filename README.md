@@ -1,10 +1,10 @@
-# Strata Launcher 1.2.0
+# Strata Launcher 1.3.0
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
 A portable Windows GUI and JSON-configured CLI for [Strata](https://github.com/Niko1221/Strata). Tune model profiles, inspect VRAM, close selected apps, view terminal telemetry, configure an existing Pi, and share inference/capabilities over a trusted private LAN.
 
-This is an independent launcher, **not Strata Desktop**, an engine distribution, or a model downloader. Version 1.2.0 brings the author's WinForms panel into the portable repository, without private paths, credentials, chats, model weights, or machine-specific Pi plugins/watchdog state.
+This is an independent launcher, **not Strata Desktop**, an engine distribution, or a model downloader. Version 1.3.0 adds a dependency-free local web console on top of 1.2.0; behaviour of every existing command is unchanged.
 
 ## RTX 5070 + 64 GB: My Current Best Setup
 
@@ -25,6 +25,10 @@ I have observed **100+ tokens/s in some workloads when the VRAM expert cache is 
 | Output / thinking | 14336 / 3072, medium |
 
 168 MiB is an aggressive user reserve, not the total driver/engine reserve. Lower the RAM budget or increase VRAM reserve when needed. `kvGrow=on` is a request and can be disabled by the engine with KV streaming. Saved manual window 4 is inactive in auto mode. Inherited tail skip is **not** proof of full-expert/lossless inference.
+
+## Web Console
+
+Configure `conf/launcher.json` first, then run `node launcher.mjs webpanel` (or add a port, default 8444) and open `http://127.0.0.1:8444/`. A zero-dependency local server bridges the same CLI commands: doctor, profiles, check, start, stop, live status. Loopback only; it starts nothing on its own.
 
 ## Windows Panel
 
