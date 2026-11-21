@@ -395,6 +395,7 @@ function profileCard(profile) {
   card.appendChild($('div', 'path', profile.profile ?? ''));
   const actions = $('div', 'row');
   const check = $('button', 'ghost', '检查');
+  const assets = $('button', 'ghost', '模型资源');
   const tune = $('button', 'ghost', '调参');
   const start = $('button', 'primary', '启动');
   const result = $('div', 'result');
@@ -417,6 +418,22 @@ function profileCard(profile) {
     } catch (error) { result.textContent = error.message; result.classList.add('err'); }
     busy(check, false, '检查');
   };
+  assets.onclick = async () => {
+    busy(assets, true, '模型资源'); result.classList.remove('err');
+    try {
+      const r = await api('GET', '/api/assets?id=' + encodeURIComponent(profile.id));
+      const mtp = r.mtp.ready ? r.mtp.path ?? `内置 MTP · 深度 ${r.mtp.depth}` :
+        r.mtp.path ? `${r.mtp.path}（缺 ${r.mtp.missing.join('、')}）` : '未解析';
+      const dflash = [...r.dflash2.stock, ...(r.dflash2.tunedReady ? [r.dflash2.tuned] : [])];
+      result.textContent = [r.nativePack ? 'Native IQ pack · spec 最小为 2' : '',
+        (r.weightsPresent ? '权重 ' : '缺少权重 ') + (r.weights ?? '未解析'),
+        'MTP ' + mtp, 'DFlash2 ' + (dflash.join('、') || '未找到'),
+        '下载前先在终端查计划',
+        `node launcher.mjs drafter-plan ${profile.id} mtp`,
+        `node launcher.mjs drafter-plan ${profile.id} dflash2`].filter(Boolean).join('\n');
+    } catch (error) { result.textContent = error.message; result.classList.add('err'); }
+    finally { busy(assets, false, '模型资源'); }
+  };
   start.onclick = async () => {
     busy(start, true, '启动'); result.textContent = ''; result.classList.remove('err');
     try {
@@ -427,7 +444,7 @@ function profileCard(profile) {
     } catch (error) { result.textContent = error.message; result.classList.add('err'); }
     busy(start, false, '启动');
   };
-  actions.append(tune, check, start);
+  actions.append(tune, check, assets, start);
   card.append(actions, result);
   return card;
 }

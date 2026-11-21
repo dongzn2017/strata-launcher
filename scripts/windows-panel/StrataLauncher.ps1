@@ -173,7 +173,7 @@ $specs = @(
     @('effort',@('off','low','medium','high')), @('workers',1,12,1),
     @('spec',0,8,1), @('specMinP',0,1,0.05),
     @('port',1024,65535,1), @('visionThreads',1,12,1), @('imageTokens',64,1024,32),
-    @('drafting',@('mtp','dflash2'))
+    @('drafting',@('auto','mtp','dflash2','off'))
 )
 foreach ($s in $specs) {
     $key = $s[0]

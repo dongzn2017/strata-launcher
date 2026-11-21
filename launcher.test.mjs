@@ -19,7 +19,7 @@ function fixture(t) {
   fs.copyFileSync(path.join(source, 'package.json'), path.join(root, 'package.json'));
   const modules = 'scripts/strata-panel';
   fs.mkdirSync(path.join(root, modules), {recursive: true});
-  for (const file of ['core.mjs', 'draft-options.mjs', 'engine-options.mjs', 'engine-extra-options.mjs', 'engine-reference.json', 'inspect.mjs', 'learning.mjs', 'sampling.mjs']) {
+  for (const file of ['core.mjs', 'draft-assets.mjs', 'draft-options.mjs', 'engine-options.mjs', 'engine-extra-options.mjs', 'engine-reference.json', 'inspect.mjs', 'learning.mjs', 'sampling.mjs']) {
     fs.copyFileSync(path.join(source, modules, file), path.join(root, modules, file));
   }
   fs.copyFileSync(path.join(source,'scripts/parameters.mjs'),path.join(root,'scripts/parameters.mjs'));
@@ -76,6 +76,61 @@ test('launcher reads local config independently of cwd and check never creates a
   assert.equal(fs.existsSync(path.join(f.root, 'runtime')), false);
 });
 
+test('native IQ profiles preserve a Windows MTP runtime directory and require a two-token window', t => {
+  const f = fixture(t);
+  const pack = f.model.args[f.model.args.indexOf('--pack') + 1];
+  fs.writeFileSync(path.join(pack, 'native_experts.txt'), 'native layout');
+  const runtime = path.dirname(f.write('mtp/rt/dense.txt', 'index'));
+  f.write('mtp/rt/dense.bin', 'dense');
+  const experts = f.write('mtp/rt/experts.bin', 'experts');
+  f.model.args.push('--prefill', 'auto', '--spec', '4', '--mtp', runtime);
+  f.write('assets/profile.json', f.model);
+  const lookup = f.command('assets', f.profile.id);
+  assert.equal(lookup.nativePack, true);
+  assert.deepEqual(lookup.mtp, {type:'directory', explicit:true, path:runtime, ready:true, missing:[]});
+  assert.equal(f.command('drafter-plan', f.profile.id).estimatedDownloadGB, 0);
+  assert.equal(f.command('drafter-fetch', f.profile.id).downloaded, false);
+  assert.equal(f.command('check', f.profile.id).settings.spec, 4);
+  assert.equal(fs.existsSync(path.join(f.root, 'runtime')), false);
+  const {directory} = f.command('prepare', f.profile.id);
+  const prepared = f.read(path.join(directory, 'model.json'));
+  assert.equal(prepared.args[prepared.args.indexOf('--mtp') + 1], runtime);
+  assert.equal(prepared.args[prepared.args.indexOf('--spec') + 1], '4');
+  fs.unlinkSync(experts);
+  assert.match(f.call('check', f.profile.id).stderr, /missing experts\.bin/);
+  assert.equal(f.command('assets', f.profile.id).mtp.ready, false);
+  f.profile.settings.spec = 0;
+  f.write('conf/launcher.json', f.config);
+  assert.match(f.call('check', f.profile.id).stderr, /Native IQ pack requires spec >= 2/);
+});
+
+test('asset lookup finds a local Flash-Next head and distinguishes it from an embedded MTP depth', t => {
+  const f = fixture(t);
+  f.model.model_name = 'qwen3.8-flash-next-iq3_xxs';
+  const pack = path.dirname(f.write('data/packs/iq3_xxs/native_experts.txt', 'native layout'));
+  f.write('data/packs/iq3_xxs/index.txt', 'index');
+  f.model.args[f.model.args.indexOf('--pack') + 1] = pack;
+  f.model.args.push('--spec', '2');
+  f.model.drafting = 'auto';
+  const rt = path.dirname(f.write('data/mtp/rt/dense.txt', 'index'));
+  f.write('data/mtp/rt/dense.bin', 'dense');
+  f.write('data/mtp/rt/experts.bin', 'experts');
+  f.write('data/dflash2/unrelated.pack', 'not the official drafter');
+  const stock = f.write('data/dflash2/qwen3.8-flash-next-dflash2.q4_0.pack', 'stock drafter');
+  f.write('assets/profile.json', f.model);
+  const lookup = f.command('assets', f.profile.id);
+  assert.equal(lookup.mtp.path, rt);
+  assert.deepEqual(lookup.dflash2.stock, [stock]);
+  assert.equal(f.command('check', f.profile.id).settings.drafting, 'auto');
+  const {directory} = f.command('prepare', f.profile.id);
+  const saved = f.read(path.join(directory, 'model.json'));
+  assert.equal(saved.args[saved.args.indexOf('--mtp') + 1], rt);
+  f.model.args.push('--mtp', '2');
+  f.write('assets/profile.json', f.model);
+  assert.deepEqual(f.command('assets', f.profile.id).mtp,
+    {type:'embedded', explicit:true, depth:2, path:null, ready:true, missing:[]});
+});
+
 test('web tuning validates and saves a whole patch without touching source profiles or runs', {timeout: 15000}, async t => {
   const f = fixture(t);
   for (const file of ['index.html','server.mjs','tuning.mjs','tuning.js']) {
@@ -106,6 +161,9 @@ test('web tuning validates and saves a whole patch without touching source profi
     const post = (payload,extra = {}) => request(endpoint,{method:'POST',body:JSON.stringify(payload),
       headers:{'Content-Type':'application/json','X-Strata-Panel':'1',Origin:origin,...extra}});
     assert.match((await request(origin+'/tuning.js')).headers.get('content-type'),/^text\/javascript/);
+    const assets = await request(origin+'/api/assets?id='+f.profile.id);
+    assert.equal(assets.status,200);
+    assert.equal((await assets.json()).weightsPresent,true);
     const before = await options();
     assert.equal(before.specs.settings.expertGiB.maximum,54);
     assert.equal(before.values.settings.context,32768);
@@ -286,7 +344,7 @@ test('detect turns a found install into a config skeleton without touching conf'
 test('1.1 parameter catalogue and validated edits preserve source model files; invalid edits never persist',t=>{
   const f=fixture(t),sourceBefore=fs.readFileSync(f.profileFile);
   const options=f.command('options');assert.equal(options.version,'1.2.0');assert.ok(options.engineOptions.length>40);
-  assert.ok(options.reference.entries.length>150);assert.equal(f.command('--version').version,'1.3.0');
+  assert.ok(options.reference.entries.length>150);assert.equal(f.command('--version').version,'1.3.1');
   const saved=f.command('set',f.profile.id,'engineOptions.tailSkip','0');
   assert.equal(saved.value,'0');assert.equal(saved.restartRequired,true);assert.ok(fs.existsSync(saved.backup));
   assert.equal(f.read(f.configFile).profiles[0].engineOptions.tailSkip,'0');

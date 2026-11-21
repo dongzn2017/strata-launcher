@@ -1,12 +1,12 @@
-# Strata 启动器 1.3.0
+# Strata 启动器 1.3.1
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-**[下载 Windows ZIP](https://github.com/dongzn2017/strata-launcher/releases/download/v1.3.0/strata-launcher-v1.3.0-windows.zip)** · [发布说明与 SHA-256 校验](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.0) · [快速开始](#快速开始)
+**[下载 Windows ZIP](https://github.com/dongzn2017/strata-launcher/releases/download/v1.3.1/strata-launcher-v1.3.1-windows.zip)** · [发布说明与 SHA-256 校验](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.1) · [快速开始](#快速开始)
 
 用 Windows 图形面板、网页或 CLI 启动和调节已有的 [Strata](https://github.com/Niko1221/Strata)。这是独立便携工具，不是 Strata Desktop；不附带引擎、模型权重、私人配置、Pi 会话或凭据。
 
-**1.3.0 新版**：网页能调参、保存和监控；原生面板重新分区，高级引擎页第一次打开就能正确布局。先完成[首次配置](#快速开始)，再用以下任一入口：
+**1.3.1 新版**支持目录形式的 MTP 运行包。网页可查模型资源，CLI 可查询下载计划并按需下载。先完成[首次配置](#快速开始)，再用以下任一入口：
 
 | 入口 | 启动方式 | 适用场景 |
 |---|---|---|
@@ -89,7 +89,7 @@ Pi 为可选项：将 `conf/pi.example.json` 复制为私有 `conf/pi.json`，�
 
 ## 快速开始
 
-1. 从 [Release 页面](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.0) 下载 `strata-launcher-v1.3.0-windows.zip` 并完整解压。不要只下载一个 `.cmd`。可用 `Get-FileHash .\strata-launcher-v1.3.0-windows.zip -Algorithm SHA256` 与该页的 `SHA256SUMS.txt` 比对。
+1. 从 [Release 页面](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.1) 下载 `strata-launcher-v1.3.1-windows.zip` 并完整解压。不要只下载一个 `.cmd`。可用 `Get-FileHash .\strata-launcher-v1.3.1-windows.zip -Algorithm SHA256` 与该页的 `SHA256SUMS.txt` 比对。
 2. 在解压后的启动器目录打开 PowerShell，确认 `node --version` 为 22 或以上。本启动器无需 `npm install`；Strata、匹配的引擎和已准备好的模型需事先安装。
 3. 用下面的命令检查已有安装，把示例目录替换为自己的 Strata 和模型目录：
 
@@ -101,7 +101,7 @@ node launcher.mjs detect "C:/Strata" "D:/Models"
 
 启动器配置内的相对路径按配置文件目录解析；原 Strata 模型档中的资产路径要求绝对路径。私人 `conf/launcher.json` 不要提交到 Git。
 
-**从 1.2.0 升级：**先保留原目录，把新版解压到新目录，再复用自己的 `conf/launcher.json`（用 Pi 则也复用 `conf/pi.json`）。配置格式仍是 `version: 1`；核对指向旧目录的相对路径。不要覆盖仍在托管运行任务的旧程序，旧日志和运行清单留在原处。
+**从 1.3.0 或 1.2.0 升级**时，先保留原目录，把新版解压到新目录，再复用自己的 `conf/launcher.json`（用 Pi 则也复用 `conf/pi.json`）。配置格式仍是 `version: 1`；核对指向旧目录的相对路径。不要覆盖仍在托管运行任务的旧程序，旧日志和运行清单留在原处。
 
 ```powershell
 node launcher.mjs list
@@ -124,6 +124,28 @@ node launcher.mjs stop RUN_ID
 ```
 
 把 `RUN_ID` 换成返回的 UUID。停止操作使用本次运行的所有权令牌，不猜 PID、不结束别人的模型。状态文件只是记录快照，进程异常退出后不能仅凭旧状态认定仍存活；`ready` 也不等于完成了真实生成或质量验收。
+
+## 检查模型和草稿头
+
+网页每张模型卡都有「模型资源」。MTP 的 `--mtp` 可以指向 Strata 的 `mtp/rt` 目录。Windows 运行包内应有 `dense.txt`、`dense.bin` 和 `experts.bin`。Native IQ pack 需要 `spec` 至少为 2，优先保留已验证的原值。
+
+```powershell
+node launcher.mjs assets PROFILE
+node launcher.mjs check PROFILE
+node launcher.mjs drafter-plan PROFILE mtp
+node launcher.mjs drafter-plan PROFILE dflash2
+```
+
+查看计划后可运行 `node launcher.mjs drafter-fetch PROFILE mtp` 或 `node launcher.mjs drafter-fetch PROFILE dflash2`。MTP 使用 Control 自带的下载、校验和打包工具，并核对本地 GGUF 的结构。DFlash2 使用 Control 的选择逻辑和校验流程。调校版仍须满足配置里声明的模型、量化和引擎条件。
+
+可以查询和下载安装官方模型目录中的条目。以下示例选择上游的 `qwen IQ3_XXS`。已有 SC117 权重时请保留指向 SC117 的配置。
+
+```powershell
+node launcher.mjs model-plan qwen IQ3_XXS "E:/Strata-models"
+node launcher.mjs model-fetch qwen IQ3_XXS "E:/Strata-models"
+```
+
+`model-fetch` 需要带 `setup.py` 的完整 Strata Control，完成后返回单独生成的模型配置路径。首次下载前，可以先配置 `deployment`，将 `profiles` 留为 `[]`。下载发生在显式的 fetch 命令中。模型安装使用 `--no-start`，资源查询、检查和启动流程离线运行。
 
 ## 调参并保存
 

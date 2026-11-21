@@ -5,6 +5,7 @@ import path from 'node:path';
 import {check, prepare, read, root, stateRoot, write} from './scripts/strata-panel/core.mjs';
 import {configSkeleton, detectInstalls, environment, probePort, probePython, runningEngines} from './scripts/strata-panel/inspect.mjs';
 import {parameterCatalogue,updateProfile} from './scripts/parameters.mjs';
+import {draftAssets, planDrafter, fetchDrafter, modelPlan, fetchModel} from './scripts/strata-panel/draft-assets.mjs';
 import {inheritedEngineOptions} from './scripts/strata-panel/engine-options.mjs';
 import {lanOptions,clientInfo} from './scripts/strata-lan/bridge.mjs';
 import {serveBridge,bridgeCommand} from './scripts/strata-lan/lifecycle.mjs';
@@ -15,6 +16,11 @@ const usage = 'Usage:\n' +
   '  node launcher.mjs doctor [PROFILE]        report the environment as one JSON object\n' +
   '  node launcher.mjs detect PATH...          find a Strata install and model profiles, print a candidate config\n' +
   '  node launcher.mjs list                    list configured profiles\n' +
+  '  node launcher.mjs assets PROFILE          find local model and drafter assets\n' +
+  '  node launcher.mjs drafter-plan PROFILE [mtp|dflash2]\n' +
+  '  node launcher.mjs drafter-fetch PROFILE [mtp|dflash2]\n' +
+  '  node launcher.mjs model-plan FAMILY MODEL [DATA_DIR]\n' +
+  '  node launcher.mjs model-fetch FAMILY MODEL DATA_DIR   install using Strata Control, without starting\n' +
   '  node launcher.mjs check PROFILE           offline check of one profile\n' +
   '  node launcher.mjs prepare PROFILE         write a run directory without starting anything\n' +
   '  node launcher.mjs start PROFILE           start in the foreground and print the RUN_ID\n' +
@@ -46,8 +52,8 @@ export function loadConfig(provided) {
     if (error.code === 'ENOENT') throw new Error('Copy conf/launcher.example.json to conf/launcher.json and configure your installation.');
     throw error;
   }
-  if (config?.version !== 1 || !object(config.deployment) || !Array.isArray(config.profiles) || !config.profiles.length) {
-    throw new Error('Expected version 1, deployment and at least one profile in conf/launcher.json');
+  if (config?.version !== 1 || !object(config.deployment) || !Array.isArray(config.profiles)) {
+    throw new Error('Expected version 1, deployment and a profiles array in conf/launcher.json');
   }
   if(Object.keys(config).some(key=>!['$schema','version','deployment','profiles','lan'].includes(key))) throw new Error('Unknown top-level configuration field');
   if(Object.keys(config.deployment).some(key=>!['controlDirectory','engineDirectory','engineVersion'].includes(key))) throw new Error('Unknown deployment field');
@@ -138,7 +144,8 @@ async function doctor(id) {
   report.runs = activeRuns();
   if (report.runs.length) fail('runs', `Launcher-owned runs are still active: ${report.runs.map(run => run.id).join(', ')}`);
   const selected = id ? [profiles.find(profile => profile.id === id)] : profiles;
-  if (!selected[0]) throw new Error(`Unknown profile: ${id}`);
+  if (id && !selected[0]) throw new Error(`Unknown profile: ${id}`);
+  if (!selected.length) fail('profiles', 'No model profiles configured. Use detect or model-plan to get started.');
   report.profiles = [];
   for (const profile of selected) {
     const entry = {id: profile.id, quant: profile.quant, ok: true};
@@ -237,6 +244,25 @@ async function main([command, id, ...extra]) {
     process.exitCode = code ?? 1;
     return;
   }
+  if (['model-plan', 'model-fetch'].includes(command)) {
+    if (!id || !extra[0] || extra.length > 2 || (command === 'model-fetch' && extra.length !== 2)) throw new Error(usage);
+    const {deployment} = loadConfig();
+    return command === 'model-plan' ? modelPlan(deployment, id, extra[0], extra[1])
+      : fetchModel(deployment, id, extra[0], extra[1], path.join(stateRoot, 'install'));
+  }
+  if (['assets', 'drafter-plan', 'drafter-fetch'].includes(command)) {
+    if (!id || extra.length > (command === 'assets' ? 0 : 1)) throw new Error(usage);
+    const {deployment, profiles} = loadConfig();
+    const request = profiles.find(profile => profile.id === id);
+    if (!request) throw new Error(`Unknown profile: ${id}`);
+    const profile = read(request.profile);
+    if (command === 'assets') {
+      return {id, engineVersion: deployment.engineVersion, model: profile.model_name ?? null,
+        ...draftAssets(profile, request.dflash2?.pack)};
+    }
+    return command === 'drafter-plan' ? planDrafter(request, deployment, profile, extra[0])
+      : fetchDrafter(request, deployment, profile, extra[0]);
+  }
   if (!['list', 'check', 'prepare', 'start', 'status', 'stop'].includes(command) || extra.length ||
       (command === 'list' ? id !== undefined : !id)) throw new Error(usage);
   if (command === 'status' || command === 'stop') return runCommand(command, id);
@@ -246,8 +272,8 @@ async function main([command, id, ...extra]) {
   const request = profiles.find(profile => profile.id === id);
   if (!request) throw new Error(`Unknown profile: ${id}`);
   if (command === 'check') {
-    const {model, vision, settings} = check(request, deployment);
-    return {id, model, vision, engineVersion: deployment.engineVersion, minimumFreeGiB: request.minimumFreeGiB, settings};
+    const {model, vision, settings, drafts} = check(request, deployment);
+    return {id, model, vision, engineVersion: deployment.engineVersion, minimumFreeGiB: request.minimumFreeGiB, settings, drafts};
   }
   if (command === 'start' && process.platform !== 'win32') throw new Error('Starting Strata requires Windows');
   const run = prepare(request, deployment);

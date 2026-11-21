@@ -1,4 +1,4 @@
-# Agent Runbook: Strata Launcher 1.3.0
+# Agent Runbook: Strata Launcher 1.3.1
 
 This repository contains a portable CLI, a Windows WinForms panel and a loopback web console (`ui/`, `node launcher.mjs webpanel`). The author's 5070/64GB preset is a settings snapshot, not a universal optimum or verified performance benchmark. Never copy local credentials, real LAN addresses, runtime state, weights or Pi watchdog budgets into this repository.
 
@@ -11,6 +11,11 @@ node launcher.mjs --version
 node launcher.mjs doctor [PROFILE]         exit 0 ready / 3 blocked / 2 broken config
 node launcher.mjs detect PATH...          candidate config; no save/start
 node launcher.mjs list
+node launcher.mjs assets PROFILE         local model and drafter inventory
+node launcher.mjs drafter-plan PROFILE [mtp|dflash2]
+node launcher.mjs drafter-fetch PROFILE [mtp|dflash2]
+node launcher.mjs model-plan FAMILY MODEL [DATA_DIR]
+node launcher.mjs model-fetch FAMILY MODEL DATA_DIR  upstream installer, no start
 node launcher.mjs check PROFILE           read-only offline validation
 node launcher.mjs prepare PROFILE         isolated run manifest, no engine
 node launcher.mjs start PROFILE           foreground, returns RUN_ID

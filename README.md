@@ -1,12 +1,12 @@
-# Strata Launcher 1.3.0
+# Strata Launcher 1.3.1
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-**[Download the Windows ZIP](https://github.com/dongzn2017/strata-launcher/releases/download/v1.3.0/strata-launcher-v1.3.0-windows.zip)** · [Release notes and SHA-256 checksums](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.0) · [Quick start](#quick-start)
+**[Download the Windows ZIP](https://github.com/dongzn2017/strata-launcher/releases/download/v1.3.1/strata-launcher-v1.3.1-windows.zip)** · [Release notes and SHA-256 checksums](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.1) · [Quick start](#quick-start)
 
 A portable Windows panel, local web console and CLI for an existing [Strata](https://github.com/Niko1221/Strata) installation. This is not Strata Desktop and ships no engines, model weights, private configuration, Pi sessions or credentials.
 
-**New in 1.3.0:** tune and save profiles in the browser, or use the refreshed native panel. The advanced engine tab now lays out correctly on first selection. Finish [initial setup](#quick-start), then choose an entry point:
+**New in 1.3.1** · MTP runtime directories work with native IQ profiles. The browser lists local model assets, and the CLI can plan and fetch available downloads. Finish [initial setup](#quick-start), then choose an entry point:
 
 | Entry point | Command | Best for |
 |---|---|---|
@@ -93,7 +93,7 @@ No dependencies are installed into your Strata runtime. This release does not ad
 
 ## Quick Start
 
-1. Download `strata-launcher-v1.3.0-windows.zip` from the [release page](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.0) and extract it completely. Do not download just the `.cmd` file. Run `Get-FileHash .\strata-launcher-v1.3.0-windows.zip -Algorithm SHA256` to compare with the published `SHA256SUMS.txt`.
+1. Download `strata-launcher-v1.3.1-windows.zip` from the [release page](https://github.com/dongzn2017/strata-launcher/releases/tag/v1.3.1) and extract it completely. Do not download just the `.cmd` file. Run `Get-FileHash .\strata-launcher-v1.3.1-windows.zip -Algorithm SHA256` to compare with the published `SHA256SUMS.txt`.
 2. Open PowerShell in the launcher folder. Check that `node --version` is 22 or newer. No `npm install` is required. Install Strata and its matching engine and prepare the model separately.
 3. Locate your existing install by replacing these sample folders with your own:
 
@@ -105,7 +105,7 @@ node launcher.mjs detect "C:/Strata" "D:/Models"
 
 Paths in launcher config are relative to that config file; asset paths inside the original Strata model profile must be absolute. Keep private `conf/launcher.json` out of Git.
 
-**Upgrading from 1.2.0:** keep the old folder, extract 1.3.0 separately, and reuse your own `conf/launcher.json` and optional `conf/pi.json`. Config format is still `version: 1`; check relative paths before launching. Do not replace files in a folder still hosting an active run. Leave old logs and run state in place.
+**Upgrading from 1.3.0 or 1.2.0** · Keep the old folder, extract 1.3.1 separately, and reuse your own `conf/launcher.json` and optional `conf/pi.json`. Config format is still `version: 1`; check relative paths before launching. Do not replace files in a folder still hosting an active run. Leave old logs and run state in place.
 
 ```powershell
 node launcher.mjs list
@@ -128,6 +128,23 @@ node launcher.mjs stop RUN_ID
 ```
 
 Replace `RUN_ID` with the returned UUID. Stop uses an ownership-token request; it does not kill an unrelated model or guess a PID. Status is a recorded snapshot, not proof that a crashed process is still alive. Readiness is not a generation-quality test.
+
+## Inspect and Acquire Model Assets
+
+Choose **模型资源** on a web model card or run `node launcher.mjs assets PROFILE`. A Strata MTP runtime can be a directory. On Windows its files are `dense.txt`, `dense.bin` and `experts.bin`. Keep the verified speculation window for a native IQ pack, with a minimum of 2.
+
+```powershell
+node launcher.mjs drafter-plan PROFILE mtp
+node launcher.mjs drafter-plan PROFILE dflash2
+node launcher.mjs drafter-fetch PROFILE mtp
+node launcher.mjs drafter-fetch PROFILE dflash2
+node launcher.mjs model-plan qwen IQ3_XXS "E:/Strata-models"
+node launcher.mjs model-fetch qwen IQ3_XXS "E:/Strata-models"
+```
+
+Choose only the desired drafter. MTP acquisition uses the installed Control's verified fetch and pack tools for the Flash-Next shape. DFlash2 acquisition delegates selection and integrity checks to Control. Tuned packs still require a matching declaration in the profile. The model example selects the upstream catalog entry. Keep an existing SC117 profile pointed at its own weights.
+
+Model fetching uses packaged Control with `setup.py` and `VERSION`, runs with `--no-start`, and returns separately generated profile paths. A fresh config can specify `deployment` and leave `profiles` empty until the first model is ready. `assets`, `check`, and `start` stay offline.
 
 ## Tune and Save
 

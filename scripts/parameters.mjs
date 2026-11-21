@@ -3,13 +3,14 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {settingBounds, write} from './strata-panel/core.mjs';
 import {engineOptionSpecs} from './strata-panel/engine-options.mjs';
+import {draftingModes} from './strata-panel/draft-assets.mjs';
 
 const mutable=new Set(['settings','sampling','engineOptions','draftOptions','learning','limits']);
 export function parameterCatalogue() {
   const reference=JSON.parse(fs.readFileSync(new URL('./strata-panel/engine-reference.json',import.meta.url),'utf8'));
   return {version:'1.2.0',curatedEngineVersion:reference.engineVersion,
     settings:Object.fromEntries(Object.entries(settingBounds).map(([key,[minimum,maximum,integer]])=>[key,{minimum,maximum,type:integer?'integer':'number'}])),
-    enums:{kv:['int8','k8v4'],drafting:['mtp','dflash2'],effort:['off','low','medium','high']},engineOptions:engineOptionSpecs,reference,
+    enums:{kv:['int8','k8v4'],drafting:draftingModes,effort:['off','low','medium','high']},engineOptions:engineOptionSpecs,reference,
     notes:['default means inherit, not off','Extended engine options target engines 0.1.59/0.1.60/0.1.62','Noneditable reference entries are not arbitrary passthrough flags','Sampling, draftOptions and learning are defined in conf/launcher.schema.json']};
 }
 

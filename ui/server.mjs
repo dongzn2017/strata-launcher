@@ -129,6 +129,7 @@ const routes = {
   'GET /api/doctor': async url => runCli(url.searchParams.get('profile') ? ['doctor', url.searchParams.get('profile')] : ['doctor']),
   'GET /api/list': () => runCli(['list']),
   'GET /api/check': async url => runCli(['check', url.searchParams.get('id')]),
+  'GET /api/assets': url => runCli(['assets', url.searchParams.get('id')]),
   'GET /api/status': url => runCommand('status', url.searchParams.get('id')),
   'GET /api/runs': () => activeRuns(),
   'GET /api/tuning': url => tuningOptions(url.searchParams.get('id')),
@@ -166,7 +167,7 @@ const server = http.createServer(async (request, response) => {
   }
   const handler = routes[`${request.method} ${url.pathname}`];
   if (!handler) return send(404, {ok: false, error: 'unknown endpoint'});
-  const ids = {'/api/doctor': profileId, '/api/check': profileId, '/api/start': profileId, '/api/status': runId, '/api/stop': runId, '/api/tuning': profileId};
+  const ids = {'/api/doctor': profileId, '/api/check': profileId, '/api/assets': profileId, '/api/start': profileId, '/api/status': runId, '/api/stop': runId, '/api/tuning': profileId};
   const id = url.searchParams.get('id');
   if (ids[url.pathname] && (url.pathname !== '/api/doctor' || url.searchParams.has('profile')) &&
       !ids[url.pathname].test((url.pathname === '/api/doctor' ? url.searchParams.get('profile') : id) ?? '')) {

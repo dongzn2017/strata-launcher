@@ -27,7 +27,6 @@
     },
     "profiles": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["id", "quant", "profile", "minimumFreeGiB"],
@@ -78,7 +77,7 @@
         "effort": {"enum": ["off", "low", "medium", "high"]}, "kv": {"enum": ["int8", "k8v4"]},
         "kvResident": {"type": "integer"}, "expertGiB": {"type": "number"}, "headroomGiB": {"type": "number"},
         "vramMiB": {"type": "integer"}, "workers": {"type": "integer"}, "spec": {"type": "integer"},
-        "specMinP": {"type": "number"}, "drafting": {"enum": ["mtp", "dflash2"]},
+        "specMinP": {"type": "number"}, "drafting": {"enum": ["auto", "mtp", "dflash2", "off"]},
         "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
         "visionThreads": {"type": "integer"}, "imageTokens": {"type": "integer"}
       }

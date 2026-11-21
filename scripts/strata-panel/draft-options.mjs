@@ -42,6 +42,7 @@ export function configureDraft(profile, settings, value) {
   // Only the dedicated controls own these overrides; preserve all unrelated user arguments.
   const previous = profile.user_args || [];
   const controlled = new Set(['--spec','--draft-conf', ...(settings.drafting === 'dflash2' ? ['--spec-min-p','--mtp-max-t'] : [])]);
+  if (settings.drafting === 'off' || (settings.drafting === 'mtp' && settings.spec === 0)) controlled.add('--mtp');
   const user = [];
   for (let i = 0; i < previous.length; i++) {
     if (controlled.has(previous[i])) { i++; continue; }

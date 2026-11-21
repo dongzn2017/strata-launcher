@@ -8,6 +8,7 @@ import {samplingDefaults, samplingOptions, samplingFields} from './sampling.mjs'
 import {engineOptions, engineOverrides, engineOptionIdentity, applyEngineOptions} from './engine-options.mjs';
 import {extraEngineOptionSpecs} from './engine-extra-options.mjs';
 import {draftOptions, configureDraft, draftGates} from './draft-options.mjs';
+import {draftAssets, draftingModes} from './draft-assets.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const stateRoot = path.join(root, 'runtime/strata-launcher');
@@ -29,6 +30,7 @@ function put(profile, key, value) {
   if (value !== undefined) profile.args.push(key, String(value));
 }
 export function defaults(profile) {
+  const userArgs = {args: Array.isArray(profile.user_args) ? profile.user_args : []};
   return {
     context: +arg(profile, '--max-context'), kv: arg(profile, '--kv') || 'int8',
     kvResident: +(arg(profile, '--kv-resident') || arg(profile, '--max-context')),
@@ -36,7 +38,9 @@ export function defaults(profile) {
     vramMiB: +arg(profile, '--vram-reserve-mib'), workers: +(arg(profile, '--pool-workers') || 5),
     output: profile.max_tokens ?? 16384, thinking: profile.reasoning_budget_tokens ?? 4096,
     effort: profile.reasoning_effort === 'none' ? 'off' : profile.reasoning_effort || 'medium',
-    spec: +(arg(profile, '--spec') || 0), specMinP: +(arg(profile, '--spec-min-p') || 0.5), drafting: profile.drafting || 'mtp',
+    spec: +(arg(userArgs, '--spec') ?? arg(profile, '--spec') ?? 0),
+    specMinP: +(arg(userArgs, '--spec-min-p') ?? arg(profile, '--spec-min-p') ?? 0.5),
+    drafting: profile.drafting || (profile.mtp === false ? 'off' : 'mtp'),
     port: profile.port || 8080, visionThreads: profile.vision?.threads || 6, imageTokens: profile.vision?.max_tokens || 300,
   };
 }
@@ -69,7 +73,7 @@ export function settingLimits(value = {}) {
 export function validate(s, limits = settingBounds) {
   for (const [key, [low, high, integer]] of Object.entries(limits)) numeric(s, key, low, high, integer);
   if (!['int8', 'k8v4'].includes(s.kv)) throw new Error('Unsupported KV precision');
-  if (s.drafting !== undefined && !['mtp', 'dflash2'].includes(s.drafting)) throw new Error('Unsupported drafter');
+  if (s.drafting !== undefined && !draftingModes.includes(s.drafting)) throw new Error('Unsupported drafter');
   if (!['off', 'low', 'medium', 'high'].includes(s.effort)) throw new Error('Unsupported thinking effort');
   if (s.thinking >= s.output || s.output + 4096 >= s.context) throw new Error('Thinking must fit inside total output; leave input space in context');
   if (s.kvResident > s.context) throw new Error('GPU KV residency exceeds context');
@@ -117,12 +121,20 @@ export function check(request, deployment) {
   const assets = {'--pack': arg(profile, '--pack'), '--native': arg(profile, '--native'),
     '--expert-profile': arg(profile, '--expert-profile'), tokenizer: profile.tokenizer};
   if (arg(profile, '--ple-gguf') !== undefined) assets['--ple-gguf'] = arg(profile, '--ple-gguf');
-  if (settings.drafting === 'mtp' && settings.spec > 0) assets['--mtp'] = arg(profile, '--mtp');
   if (vision) assets.mmproj = profile.vision.mmproj;
   for (const [key, file] of Object.entries(assets)) {
     if (typeof file !== 'string' || !path.isAbsolute(file)) throw new Error(`${key}: expected an absolute asset path in ${request.profile}`);
     const stat = fs.statSync(file, {throwIfNoEntry: false});
     if (!(stat?.isFile() || ['--pack','tokenizer'].includes(key) && stat?.isDirectory())) throw new Error(`Missing ${key} asset: ${file}`);
+  }
+  const gates = draftGates(request.dflash2);
+  const drafts = draftAssets(profile, gates.pack);
+  if (drafts.nativePack && ['mtp', 'off'].includes(settings.drafting) && settings.spec < 2) {
+    throw new Error('Native IQ pack requires spec >= 2 in this engine, even with drafting off');
+  }
+  if (settings.drafting === 'mtp' && settings.spec > 0 && !drafts.mtp.ready) {
+    const details = drafts.mtp.missing.length ? `; missing ${drafts.mtp.missing.join(', ')}` : '';
+    throw new Error(`MTP asset not ready: ${drafts.mtp.path ?? 'no compatible --mtp path in the model profile'}${details}. Run launcher.mjs assets ${request.id}.`);
   }
   const sampling = samplingOptions(request.sampling, samplingDefaults(settings, profile.sampling));
   const routing = planLearning({baseFile: assets['--expert-profile'],
@@ -141,7 +153,6 @@ export function check(request, deployment) {
     ...(settings.drafting === 'dflash2' ? {draftOptions: drafting} : {}),
     ...(learning.enabled ? {learning} : {}), ...(sampling.mode === 'custom' ? {sampling} : {}), ...engineIdentity}).slice(0, 16);
   const clientModel = `${slug}-${quant}-${vision ? 'vision' : 'text'}-${fingerprint}`;
-  const gates = draftGates(request.dflash2);
   const tuned = settings.drafting === 'dflash2' && drafting.pack === 'tuned';
   if (tuned && (!gates.pack || !gates.model)) throw new Error('draftOptions.pack "tuned" needs dflash2.pack and dflash2.model in the launcher profile');
   if (tuned && gates.quant && gates.quant !== quant) throw new Error(`dflash2.pack ${gates.pack} is verified for quant ${gates.quant}, not ${quant}`);
@@ -150,23 +161,16 @@ export function check(request, deployment) {
   }
   const model = tuned ? gates.model : clientModel;
   if (settings.drafting === 'dflash2') {
-    const drafter = path.join(path.dirname(path.dirname(arg(profile, '--pack'))), 'dflash2');
-    let found;
-    try {
-      found = tuned ? [path.join(drafter, gates.pack)] :
-        fs.readdirSync(drafter).filter(name => name.toLowerCase().endsWith('.pack')).map(name => path.join(drafter, name));
-    } catch { found = []; }
-    if (!found.length) throw new Error(`No DFlash2 drafter under ${drafter}; fetch the drafter for this model first`);
-    for (const file of found) {
-      if (!fs.statSync(file, {throwIfNoEntry: false})?.isFile()) throw new Error(`Missing DFlash2 drafter: ${file}`);
+    if (tuned ? !drafts.dflash2.tunedReady : !drafts.dflash2.stock.length) {
+      throw new Error(`No matching DFlash2 drafter under ${drafts.dflash2.directory}; run launcher.mjs drafter-plan ${request.id} dflash2`);
     }
   }
-  return {profile, settings, drafting, advanced, envOverrides, routing, sampling, vision, fingerprint, clientModel, model,
+  return {profile, settings, drafting, drafts, advanced, envOverrides, routing, sampling, vision, fingerprint, clientModel, model,
     tuned, source, python, engine};
 }
 
 export function prepare(request, deployment) {
-  const {profile, settings, drafting, advanced, envOverrides, routing, sampling, vision, fingerprint, clientModel, model,
+  const {profile, settings, drafting, drafts, advanced, envOverrides, routing, sampling, vision, fingerprint, clientModel, model,
     tuned, source, python, engine} = check(request, deployment);
   const id = randomUUID();
   const dir = path.join(stateRoot, 'runs', id);
@@ -180,7 +184,8 @@ export function prepare(request, deployment) {
   })) put(profile, key, value);
   delete profile.expert_profile_save;
   delete profile.expert_profile_save_every;
-  if (settings.spec === 0) put(profile, '--mtp', undefined);
+  if (settings.drafting === 'off' || (settings.drafting === 'mtp' && settings.spec === 0)) put(profile, '--mtp', undefined);
+  else if (drafts.mtp.ready && !drafts.mtp.explicit) put(profile, '--mtp', drafts.mtp.path);
   configureDraft(profile, settings, drafting);
   if (tuned) profile.aliases = [...new Set([...(profile.aliases || []), clientModel])];
   Object.assign(profile, {exe: engine, model_name: model, port: settings.port, host: '127.0.0.1', parallel: 1,

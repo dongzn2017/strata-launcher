@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1
+
+- Accept Windows Strata MTP runtime directories and distinguish embedded MTP depth from a filesystem path.
+- Report the minimum speculation window required by native IQ packs instead of forcing drafting off to pass a path check.
+- Show local model assets in the web console. Add explicit model and drafter plan/fetch commands that use Strata Control.
+
 ## 1.3.0
 
 - Added a dependency-free loopback web console: `node launcher.mjs webpanel [PORT]` (default 8444). Check configured profiles, start and stop launcher-owned runs, and see run status without enabling LAN forwarding.
